@@ -15,12 +15,8 @@ class UserGroupUpdate(BaseModel):
     is_active: Optional[bool] = None
 
     model_config = {
-            "json_schema_extra": {
-                "example": {
-                    "is_active": False
-                }
+                "is_active": False
             }
-    }
 
 class UserGroupRead(UserGroupBase):
     id: int

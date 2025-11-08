@@ -1,4 +1,5 @@
 from asyncpg import Pool, create_pool
+
 from src.settings import settings
 
 # Глобальные пулы (можно добавить другие: analytics_pool, auth_pool и т.д.)

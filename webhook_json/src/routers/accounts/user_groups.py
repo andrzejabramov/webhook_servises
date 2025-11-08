@@ -39,18 +39,11 @@ async def update_group(
     group_update: UserGroupUpdate = Body(
         examples=[
             {
-                "summary": "Deactivate group",
-                "description": "Set group as inactive",
-                "value": {
-                    "is_active": False
-                }
+                "is_active": False
             },
             {
-                "summary": "Update name and description",
-                "value": {
-                    "name": "Super Admins",
-                    "description": "Full system access"
-                }
+                "name": "Super Admins",
+                "description": "Full system access"
             }
         ]
     )
