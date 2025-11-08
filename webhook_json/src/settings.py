@@ -1,21 +1,13 @@
 from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
+from pydantic import ConfigDict, PostgresDsn
 from pathlib import Path
 
 
 class Settings(BaseSettings):
-    database_url: str
+    database_url: PostgresDsn
+    mydb_dsn: PostgresDsn
     rabbitmq_url: str
     log_dir: Path = Path("./logs")
-
-    # # PostgreSQL
-    # postgres_db: str
-    # postgres_user: str
-    # postgres_password: str
-
-    # # RabbitMQ
-    # rabbitmq_default_user: str
-    # rabbitmq_default_pass: str
 
     model_config = ConfigDict(
         env_file=".env",

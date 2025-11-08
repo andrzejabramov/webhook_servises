@@ -1,4 +1,3 @@
-# src/webhook.py
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Any, Dict
 from datetime import datetime

@@ -1,4 +1,3 @@
-# src/exceptions.py
 from fastapi import HTTPException
 
 class WebhookProcessingError(HTTPException):
