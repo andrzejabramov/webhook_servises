@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from src.db.pools import init_pools, close_pools
-from src.routers import webhook
 from src.routers.accounts import router as accounts_router
 
 
@@ -14,7 +13,6 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan)
-app.include_router(webhook.router, prefix="/webhook")
 app.include_router(accounts_router, prefix="/accounts")
 
 
