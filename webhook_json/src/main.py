@@ -1,9 +1,9 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
-from src.db.pools import init_pools, close_pools
-from src.routers import webhook
-from src.routers.accounts import router as accounts_router
+from webhook_json.src.db.pools import init_pools, close_pools
+from webhook_json.src.routers import webhook
+from webhook_json.src.routers.accounts import router as accounts_router
 
 
 @asynccontextmanager

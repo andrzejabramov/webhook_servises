@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body
-from src.services.accounts import UserService
-from src.schemas.accounts import UserCreate, UserUpdate, UserRead
-from src.dependencies.db import get_accounts_db_pool_dep
 from asyncpg import Pool
+
+from users.src.services.accounts import UserService
+from users.src.schemas.accounts import UserCreate, UserUpdate, UserRead
+from users.src.dependencies.db import get_accounts_db_pool_dep
+
 
 router = APIRouter(prefix="/accounts/users", tags=["Accounts: Users"])
 

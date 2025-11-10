@@ -1,6 +1,6 @@
 from asyncpg import Pool
 
-from src.db.pools import get_main_db_pool, get_accounts_db_pool
+from webhook_json.src.db.pools import get_main_db_pool, get_accounts_db_pool
 
 # Это — "точка инъекции" для FastAPI
 def get_db_pool() -> Pool:

@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from src.services.accounts import UserGroupService
-from src.schemas.accounts import UserGroupCreate, UserGroupUpdate, UserGroupRead
-from src.dependencies.db import get_db_pool  # ← должен возвращать Pool из app.state.db_pool
 from asyncpg import Pool
 import uuid
+
+from webhook_json.src.services.accounts import UserGroupService
+from webhook_json.src.schemas.accounts import UserGroupCreate, UserGroupUpdate, UserGroupRead
+from webhook_json.src.dependencies.db import get_db_pool  # ← должен возвращать Pool из app.state.db_pool
+
 
 router = APIRouter(prefix="/accounts/user-groups", tags=["Accounts: User Groups"])
 

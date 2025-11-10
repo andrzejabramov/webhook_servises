@@ -1,6 +1,6 @@
 from asyncpg import Pool, create_pool
 
-from src.settings import settings
+from webhook_json.src.settings import settings
 
 # Глобальные пулы (можно добавить другие: analytics_pool, auth_pool и т.д.)
 _main_db_pool: Pool | None = None

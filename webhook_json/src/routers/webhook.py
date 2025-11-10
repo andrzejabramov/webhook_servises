@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from src.dependencies.webhook import process_webhook_payload
+from webhook_json.src.dependencies.webhook import process_webhook_payload
 
 router = APIRouter(tags=["Webhooks"])
 

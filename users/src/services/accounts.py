@@ -1,5 +1,7 @@
 from asyncpg import Pool
-from src.schemas.accounts import (
+import uuid
+
+from users.src.schemas.accounts import (
     UserGroupCreate,
     UserGroupUpdate,
     UserGroupRead,
@@ -8,7 +10,7 @@ from src.schemas.accounts import (
     UserRead
 )
 from typing import List, Optional
-import uuid
+
 
 class UserGroupService:
     def __init__(self, db_pool: Pool):

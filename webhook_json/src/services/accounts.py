@@ -1,5 +1,6 @@
 from asyncpg import Pool
-from src.schemas.accounts import (
+
+from webhook_json.src.schemas.accounts import (
     UserGroupCreate,
     UserGroupUpdate,
     UserGroupRead,

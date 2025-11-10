@@ -2,10 +2,10 @@ from fastapi import Depends
 from asyncpg import Pool, PostgresError
 from loguru import logger
 
-from src.schemas.webhook import WebhookPayload
-from src.db.functions import call_webhook_function
-from src.exceptions.exceptions import DatabaseError, WebhookProcessingError
-from src.dependencies.db import get_db_pool
+from webhook_json.src.schemas.webhook import WebhookPayload
+from webhook_json.src.db.functions import call_webhook_function
+from webhook_json.src.exceptions.exceptions import DatabaseError, WebhookProcessingError
+from webhook_json.src.dependencies.db import get_db_pool
 
 async def process_webhook_payload(
     payload: WebhookPayload,
