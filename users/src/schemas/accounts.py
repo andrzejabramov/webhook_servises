@@ -1,5 +1,5 @@
-from pydantic import BaseModel, UUID4
-from typing import Optional
+from pydantic import BaseModel, UUID4, Json
+from typing import Optional, Dict, Any
 from datetime import datetime
 
 # --- Users_groups ---
@@ -32,21 +32,26 @@ class UserGroupRead(UserGroupBase):
 # --- Users ---
 
 class UserBase(BaseModel):
-    email: str
-    full_name: Optional[str] = None
+    contact_email: str
+    username: Optional[str] = None
+    profile: Optional[Dict[str, Any]] = None
 
 class UserCreate(UserBase):
     pass
 
 class UserUpdate(BaseModel):
-    email: Optional[str] = None
-    full_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    username: Optional[str] = None
+    profile: Optional[str] = None
     is_active: Optional[bool] = None
 
 class UserRead(UserBase):
-    id: int
+    id: UUID4
+    username: str
+    contact_email: str
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
+    profile: Optional[Dict[str, Any]] = None
 
     model_config = {"from_attributes": True}

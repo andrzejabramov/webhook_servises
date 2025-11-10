@@ -1,6 +1,8 @@
 from asyncpg import Pool
-import uuid
+from typing import List, Optional
+import  json
 
+from src.utils.json_utils import maybe_json_dumps, maybe_json_loads
 from src.schemas.accounts import (
     UserGroupCreate,
     UserGroupUpdate,
@@ -9,7 +11,7 @@ from src.schemas.accounts import (
     UserUpdate,
     UserRead
 )
-from typing import List, Optional
+
 
 
 class UserGroupService:
@@ -46,10 +48,18 @@ class UserService:
         self.pool = db_pool
 
     async def create(self, user: UserCreate) -> UserRead:
-        query = 'SELECT * FROM accounts.create_user($1, $2)'
+        #profile_json = json.dumps(user.profile) if user.profile is not None else None
+        query = 'SELECT * FROM accounts.create_user($1::text, $2::text, $3::jsonb)'
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(query, user.email, user.full_name)
-        return UserRead(**dict(row))
+            row = await conn.fetchrow(
+                query,
+                user.contact_email,
+                user.username,
+                maybe_json_dumps(user.profile),
+            )
+        row_dict = dict(row)
+        row_dict["profile"] = maybe_json_loads(row_dict.get("profile"))
+        return UserRead(**dict(row_dict))
 
     async def get_by_id(self, user_id: int) -> Optional[UserRead]:
         query = 'SELECT * FROM accounts.get_user($1)'
@@ -64,13 +74,14 @@ class UserService:
         return [UserRead(**dict(row)) for row in rows]
 
     async def update(self, user_id: int, user_update: UserUpdate) -> Optional[UserRead]:
-        query = 'SELECT * FROM accounts.update_user($1, $2, $3, $4)'
+        query = 'SELECT * FROM accounts.update_user($1, $2, $3, $4, $5)'
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 query,
                 user_id,
-                user_update.email,
-                user_update.full_name,
-                user_update.is_active
+                user_update.contact_email,
+                user_update.username,
+                user_update.profile,
+                user_update.is_active,
             )
         return UserRead(**dict(row)) if row else None
