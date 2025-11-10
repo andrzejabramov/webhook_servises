@@ -1,7 +1,7 @@
 from asyncpg import Connection
 from loguru import logger
 
-from users.src.exceptions.exceptions import InvalidWebhookData
+from src.exceptions.exceptions import InvalidWebhookData
 
 async def call_webhook_function(conn: Connection, payload: dict) -> dict:
     try:

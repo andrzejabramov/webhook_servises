@@ -1,7 +1,7 @@
 from asyncpg import Pool
 import uuid
 
-from users.src.schemas.accounts import (
+from src.schemas.accounts import (
     UserGroupCreate,
     UserGroupUpdate,
     UserGroupRead,

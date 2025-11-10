@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from asyncpg import Pool
 
-from users.src.services.accounts import UserGroupService
-from users.src.schemas.accounts import UserGroupCreate, UserGroupUpdate, UserGroupRead
-from users.src.dependencies.db import get_db_pool  # ← должен возвращать Pool из app.state.db_pool
+from src.services.accounts import UserGroupService
+from src.schemas.accounts import UserGroupCreate, UserGroupUpdate, UserGroupRead
+from src.dependencies.db import get_db_pool  # ← должен возвращать Pool из app.state.db_pool
 
 import uuid
 

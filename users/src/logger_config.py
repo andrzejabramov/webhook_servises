@@ -1,7 +1,7 @@
 from loguru import logger
 import os
 
-from users.src.settings import settings
+from src.settings import settings
 
 def setup_logger():
     log_dir = settings.log_dir
