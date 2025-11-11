@@ -89,3 +89,30 @@ class UserContactRead(UserContactBase):
 
 class UserContactDeactivate(BaseModel):
     is_active: bool = False
+
+class UserContactBase(BaseModel):
+    user_id: UUID            # ← ссылка на users.id (uuid)
+    contact_type_id: int     # ← ссылка на contact_types.id (int!)
+    value: str
+
+class UserContactCreate(UserContactBase):
+    pass
+
+class UserContactRead(UserContactBase):
+    id: UUID
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class ContactTypeBase(BaseModel):
+    name: str
+
+class ContactTypeCreate(ContactTypeBase):
+    pass
+
+class ContactTypeRead(ContactTypeBase):
+    id: int
+    created_at: datetime

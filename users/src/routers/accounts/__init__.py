@@ -3,6 +3,7 @@ from .user_groups import router as user_groups_router
 from .users import router as users_router
 from .user_group_memberships import router as memberships_router
 from .user_contacts import router as user_contacts_router
+from .contact_types import router as contact_types_router
 
 # Создаём общий роутер для всего модуля "accounts"
 router = APIRouter()
@@ -12,3 +13,6 @@ router.include_router(user_groups_router, prefix="/user-groups")
 router.include_router(users_router)
 router.include_router(memberships_router)
 router.include_router(user_contacts_router)
+router.include_router(contact_types_router)
+
+
