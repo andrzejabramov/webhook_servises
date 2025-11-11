@@ -7,7 +7,7 @@ from src.settings import settings
 from src.logger_config import setup_logger
 
 
-setup_logger()
+logger = setup_logger()
 logger.info("✅ Logger is configured and working")
 
 @asynccontextmanager

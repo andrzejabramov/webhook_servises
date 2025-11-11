@@ -1,7 +1,6 @@
 from asyncpg import Pool
 from typing import List, Optional, Dict, Any
 from uuid import UUID
-import  json
 
 from src.utils.json_utils import (
     normalize_user_row,
