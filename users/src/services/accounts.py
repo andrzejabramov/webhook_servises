@@ -1,5 +1,6 @@
 from asyncpg import Pool
 from typing import List, Optional
+from uuid import UUID
 import  json
 
 from src.utils.json_utils import maybe_json_dumps, maybe_json_loads
@@ -9,9 +10,13 @@ from src.schemas.accounts import (
     UserGroupRead,
     UserCreate,
     UserUpdate,
-    UserRead
+    UserRead,
+    UserGroupMembershipCreate,
+    UserGroupMembershipRead,
+    UserGroupMembershipUpdate,
+    UserContactCreate,
+    UserContactRead,
 )
-
 
 
 class UserGroupService:
@@ -85,3 +90,71 @@ class UserService:
                 user_update.is_active,
             )
         return UserRead(**dict(row)) if row else None
+
+class UserGroupMembershipService:
+    def __init__(self, db_pool: Pool):
+        self.pool = db_pool
+
+    async def create(self, membership: UserGroupMembershipCreate) -> UserGroupMembershipRead:
+        query = 'SELECT * FROM accounts.create_user_group_membership($1, $2)'
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, membership.user_id, membership.group_id)
+        return UserGroupMembershipRead(**dict(row))
+
+    async def get(self, user_id: UUID, group_id: int) -> Optional[UserGroupMembershipRead]:
+        query = 'SELECT * FROM accounts.get_user_group_membership($1, $2)'
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, user_id, group_id)
+        return UserGroupMembershipRead(**dict(row)) if row else None
+
+    async def get_user_groups(self, user_id: UUID, only_active: bool = True) -> List[UserGroupMembershipRead]:
+        query = 'SELECT * FROM accounts.get_user_groups($1, $2)'
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, user_id, only_active)
+        return [UserGroupMembershipRead(**dict(row)) for row in rows]
+
+    async def deactivate(self, user_id: UUID, group_id: int) -> UserGroupMembershipRead:
+        query = 'SELECT * FROM accounts.deactivate_user_group_membership($1, $2)'
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, user_id, group_id)
+        return UserGroupMembershipRead(**dict(row))
+
+    async def reactivate(self, user_id: UUID, group_id: int) -> UserGroupMembershipRead:
+        query = 'SELECT * FROM accounts.reactivate_user_group_membership($1, $2)'
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, user_id, group_id)
+        return UserGroupMembershipRead(**dict(row))
+
+class UserContactService:
+    def __init__(self, db_pool: Pool):
+        self.pool = db_pool
+
+    async def create(self, contact: UserContactCreate) -> UserContactRead:
+        query = 'SELECT * FROM accounts.create_user_contact($1, $2, $3)'
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, contact.user_id, contact.contact_type_id, contact.value)
+        return UserContactRead(**dict(row))
+
+    async def get_by_id(self, contact_id: UUID) -> Optional[UserContactRead]:
+        query = 'SELECT * FROM accounts.get_user_contact_by_id($1)'
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, contact_id)
+        return UserContactRead(**dict(row)) if row else None
+
+    async def get_by_user_id(self, user_id: UUID, only_active: bool = True) -> List[UserContactRead]:
+        query = 'SELECT * FROM accounts.get_user_contacts_by_user_id($1, $2)'
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, user_id, only_active)
+        return [UserContactRead(**dict(row)) for row in rows]
+
+    async def deactivate(self, contact_id: UUID) -> UserContactRead:
+        query = 'SELECT * FROM accounts.deactivate_user_contact($1)'
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, contact_id)
+        return UserContactRead(**dict(row))
+
+    async def reactivate(self, contact_id: UUID) -> UserContactRead:
+        query = 'SELECT * FROM accounts.reactivate_user_contact($1)'
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, contact_id)
+        return UserContactRead(**dict(row))
