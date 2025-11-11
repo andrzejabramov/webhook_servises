@@ -33,23 +33,19 @@ class UserGroupRead(UserGroupBase):
 # --- Users ---
 
 class UserBase(BaseModel):
-    contact_email: str
-    username: Optional[str] = None
+    is_active: Optional[bool] = None
     profile: Optional[Dict[str, Any]] = None
 
 class UserCreate(UserBase):
     pass
 
 class UserUpdate(BaseModel):
-    contact_email: Optional[str] = None
-    username: Optional[str] = None
-    profile: Optional[str] = None
     is_active: Optional[bool] = None
+    profile: Optional[Dict[str, Any]] = None
 
 class UserRead(UserBase):
-    id: UUID4
+    id: UUID
     username: str
-    contact_email: str
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -79,10 +75,8 @@ class UserContactBase(BaseModel):
     contact_type_id: int
     value: str
 
-
 class UserContactCreate(UserContactBase):
     pass
-
 
 class UserContactRead(UserContactBase):
     id: UUID
@@ -92,7 +86,6 @@ class UserContactRead(UserContactBase):
 
     class Config:
         from_attributes = True
-
 
 class UserContactDeactivate(BaseModel):
     is_active: bool = False

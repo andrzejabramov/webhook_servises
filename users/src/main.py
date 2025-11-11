@@ -3,7 +3,12 @@ from fastapi import FastAPI
 
 from src.db.pools import init_pools, close_pools
 from src.routers.accounts import router as accounts_router
+from src.settings import settings
+from src.logger_config import setup_logger
 
+
+setup_logger()
+logger.info("✅ Logger is configured and working")
 
 @asynccontextmanager
 async def lifespan(app):

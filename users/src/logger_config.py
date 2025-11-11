@@ -1,16 +1,18 @@
+from pathlib import Path
 from loguru import logger
 import os
 
 from src.settings import settings
 
 def setup_logger():
-    log_dir = settings.log_dir
-    os.makedirs(log_dir, exist_ok=True)
+    log_dir = Path(settings.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    #os.makedirs(log_dir, exist_ok=True)
     logger.remove()
 
     # Лог в файл (ежедневная ротация, 6 месяцев, архивация)
     logger.add(
-        log_dir / "webhook.log",
+        log_dir / "users.logs",
         rotation="00:00",
         retention="180 days",
         compression="zip",

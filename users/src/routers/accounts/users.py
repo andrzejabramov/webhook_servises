@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from asyncpg import Pool
+from uuid import UUID
 
 from src.services.accounts import UserService
 from src.schemas.accounts import UserCreate, UserUpdate, UserRead
@@ -21,17 +22,19 @@ async def list_users(service: UserService = Depends(get_user_service)):
 
 @router.patch("/{user_id}", response_model=UserRead)
 async def update_user(
-    user_id: int,
+    user_id: UUID,
     user_update: UserUpdate = Body(
     examples=[
-        {"summary": "Deactivate user", "value": {"is_active": False}},
-        {"summary": "Update name", "value": {"full_name": "John Doe"}}
+        {
+            "is_active": False,
+            "profile": {"key": "value"}
+        }
     ]
 ),
-    #user_update: UserUpdate,
-    service: UserService = Depends(get_user_service)
+    service: UserService = Depends(lambda pool=Depends(get_accounts_db_pool_dep): UserService(pool))
 ):
-    updated = await service.update(user_id, user_update)
-    if not updated:
-        raise HTTPException(status_code=404, detail="User not found")
-    return updated
+    return await service.update(
+        user_id=user_id,
+        profile=user_update.profile,      # ← dict или None
+        is_active=user_update.is_active   # ← bool или None
+    )
