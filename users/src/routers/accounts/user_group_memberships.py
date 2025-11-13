@@ -4,8 +4,8 @@ from asyncpg import Pool
 from typing import List
 
 from src.dependencies.db import get_accounts_db_pool_dep
-from src.services.accounts import UserGroupMembershipService
-from src.schemas.accounts import (
+from src.services.user_group_memberships import UserGroupMembershipService
+from src.schemas.user_group_memberships import (
     UserGroupMembershipCreate,
     UserGroupMembershipRead,
     UserGroupMembershipUpdate,

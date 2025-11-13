@@ -1,9 +1,9 @@
-# src/routers/accounts/contact_types.py
 from fastapi import APIRouter, Depends, status
 from asyncpg import Pool
+
 from src.dependencies.db import get_accounts_db_pool_dep
-from src.services.accounts import ContactTypeService
-from src.schemas.accounts import ContactTypeCreate, ContactTypeRead
+from src.services.contact_types import ContactTypeService
+from src.schemas.contact_types import ContactTypeCreate, ContactTypeRead
 
 router = APIRouter(prefix="/accounts/contact-types", tags=["Accounts: Contact Types"])
 

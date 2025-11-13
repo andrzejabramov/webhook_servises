@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body
 from asyncpg import Pool
 from uuid import UUID
 
-from src.services.accounts import UserService
-from src.schemas.accounts import UserCreate, UserUpdate, UserRead
+from src.services.users import UserService
+from src.schemas.users import UserCreate, UserUpdate, UserRead
 from src.dependencies.db import get_accounts_db_pool_dep
 
 

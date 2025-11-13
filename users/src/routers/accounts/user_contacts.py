@@ -4,8 +4,8 @@ from asyncpg import Pool
 from typing import List
 
 from src.dependencies.db import get_accounts_db_pool_dep
-from src.services.accounts import UserContactService
-from src.schemas.accounts import UserContactCreate, UserContactRead
+from src.services.user_contacts import UserContactService
+from src.schemas.user_contacts import UserContactCreate, UserContactRead
 
 
 router = APIRouter(prefix="/accounts/contacts", tags=["Accounts: User Contacts"])

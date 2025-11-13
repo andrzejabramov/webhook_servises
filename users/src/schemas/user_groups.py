@@ -1,7 +1,6 @@
 from pydantic import BaseModel, UUID4, Field
-from typing import Optional, Dict, Any
+from typing import Optional
 from datetime import datetime
-from uuid import UUID
 
 
 class UserGroupBase(BaseModel):
