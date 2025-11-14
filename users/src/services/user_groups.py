@@ -1,7 +1,6 @@
 from asyncpg import Pool
 from typing import List, Optional
 
-
 from src.utils.json_utils import normalize_user_row, maybe_json_dumps, maybe_json_loads
 from src.schemas.user_groups import UserGroupCreate, UserGroupUpdate, UserGroupRead
 

@@ -15,7 +15,6 @@ class UserService:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 query,
-                user.username,
                 maybe_json_dumps(user.profile),
             )
         row_dict = dict(row)

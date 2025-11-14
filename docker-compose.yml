@@ -31,7 +31,7 @@ services:
       - backend
 
   webhook:
-    build: ./webhook_json
+    build: webhook_2can
     container_name: dev-webhook
     ports:
       - "8000:8000"
