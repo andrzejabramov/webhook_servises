@@ -1,7 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, Any, Dict
-from datetime import datetime
-from decimal import Decimal
+from pydantic import BaseModel, ConfigDict
 
 class WebhookPayload(BaseModel):
     model_config = ConfigDict(extra="allow")  # разрешить любые дополнительные поля

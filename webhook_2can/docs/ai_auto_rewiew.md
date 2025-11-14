@@ -1,0 +1,248 @@
+## /src
+### /db/functions.py
+```commandline
+from asyncpg import Connection
+from typing import Any, Dict
+import json
+
+async def call_webhook_function(conn: Connection, payload: Dict[str, Any]) -> Any:
+    # Пример: вызов функции в схеме to_can
+    json_str = json.dumps(payload, ensure_ascii=False)
+    result = await conn.fetchval(
+        "SELECT to_can.f_syspay($1::json)",
+        json_str
+    )
+    return result
+```
+### /db/pools.py
+```commandline
+from asyncpg import Pool, create_pool
+
+from src.settings import settings
+
+# Глобальные пулы (можно добавить другие: analytics_pool, auth_pool и т.д.)
+_main_db_pool: Pool | None = None
+
+async def init_pools():
+    global _main_db_pool, _accounts_db_pool
+    if _main_db_pool is None:
+        # 👇 Преобразуем PostgresDsn → str
+        _main_db_pool = await create_pool(dsn=str(settings.database_url))
+
+async def close_pools():
+    global _main_db_pool, _accounts_db_pool
+    if _main_db_pool:
+        await _main_db_pool.close()
+        _main_db_pool = None
+
+def get_main_db_pool() -> Pool:
+    if _main_db_pool is None:
+        raise RuntimeError("Main DB pool not initialized")
+    return _main_db_pool
+```
+### /dependencies/db.py
+```commandline
+from asyncpg import Pool
+
+from src.db.pools import get_main_db_pool
+
+# Это — "точка инъекции" для FastAPI
+def get_db_pool() -> Pool:
+    """Для вебхуков → paydb"""
+    return get_main_db_pool()
+
+# def get_accounts_db_pool_dep() -> Pool:  # ← новая зависимость
+#     """Для учётных записей → mydb"""
+#     return get_accounts_db_pool()
+```
+### /dependencies/webhook.py
+```commandline
+from fastapi import Depends
+from asyncpg import Pool, PostgresError
+from loguru import logger
+
+from src.schemas.webhook import WebhookPayload
+from src.db.functions import call_webhook_function
+from src.exceptions.exceptions import DatabaseError, WebhookProcessingError
+from src.dependencies.db import get_db_pool
+
+async def process_webhook_payload(
+    payload: WebhookPayload,
+    db_pool: Pool = Depends(get_db_pool)
+):
+    try:
+        async with db_pool.acquire() as conn:
+            result = await call_webhook_function(conn, payload.model_dump())
+        return result
+    except PostgresError as e:
+        logger.error(f"PostgreSQL error: {e}")
+        raise DatabaseError(detail="Database error")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise WebhookProcessingError(detail="Internal processing error")
+```
+### /exceptions/exceptions.py
+```commandline
+from fastapi import HTTPException
+
+class WebhookProcessingError(HTTPException):
+    def __init__(self, detail: str = "Failed to process webhook"):
+        super().__init__(status_code=500, detail=detail)
+
+class InvalidWebhookData(HTTPException):
+    def __init__(self, detail: str = "Invalid webhook data"):
+        super().__init__(status_code=400, detail=detail)
+
+class DatabaseError(HTTPException):
+    def __init__(self, detail: str = "Database unavailable"):
+        super().__init__(status_code=503, detail=detail)
+```
+### /queue/connection.py
+```commandline
+
+```
+### /queue/publisher.py
+```commandline
+
+```
+### /routers/webhook.py
+```commandline
+from fastapi import Depends
+from asyncpg import Pool, PostgresError
+from loguru import logger
+
+from src.schemas.webhook import WebhookPayload
+from src.db.functions import call_webhook_function
+from src.exceptions.exceptions import DatabaseError, WebhookProcessingError
+from src.dependencies.db import get_db_pool
+
+async def process_webhook_payload(
+    payload: WebhookPayload,
+    db_pool: Pool = Depends(get_db_pool)
+):
+    try:
+        async with db_pool.acquire() as conn:
+            result = await call_webhook_function(conn, payload.model_dump())
+        return result
+    except PostgresError as e:
+        logger.error(f"PostgreSQL error: {e}")
+        raise DatabaseError(detail="Database error")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise WebhookProcessingError(detail="Internal processing error")
+```
+### /schemas/webhook.py
+```commandline
+from pydantic import BaseModel, ConfigDict
+
+class WebhookPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")  # разрешить любые дополнительные поля
+
+    Id: str
+    MID: str
+    Amount: str
+    ReaderId: str
+    CreatedAt: str
+    Inputtype: int
+    ClientName: str
+    Description: str
+```
+### /servicies/db_service.py
+```commandline
+from asyncpg import Connection
+from loguru import logger
+
+from src.exceptions.exceptions import InvalidWebhookData
+
+async def call_webhook_function(conn: Connection, payload: dict) -> dict:
+    try:
+        logger.debug(f"Calling DB function with keys: {list(payload.keys())}")
+        result = await conn.fetchval("SELECT to_can.process_webhook($1)", payload)
+
+        if isinstance(result, dict) and result.get("error"):
+            logger.warning(f"DB rejected webhook: {result['error']}")
+            raise InvalidWebhookData(detail=result["error"])
+
+        logger.info("Webhook processed successfully")
+        return result
+
+    except Exception:
+        logger.exception("Exception in DB function call")
+        raise
+```
+### logger_config.py
+```commandline
+from loguru import logger
+import os
+
+from src.settings import settings
+
+def setup_logger():
+    log_dir = settings.log_dir
+    os.makedirs(log_dir, exist_ok=True)
+    logger.remove()
+
+    # Лог в файл (ежедневная ротация, 6 месяцев, архивация)
+    logger.add(
+        log_dir / "webhook.log",
+        rotation="00:00",
+        retention="180 days",
+        compression="zip",
+        level="INFO",
+        encoding="utf-8",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
+    )
+
+    # Ошибки в stderr (для Docker-логов)
+    logger.add(
+        sink=lambda msg: print(msg, end=""),
+        level="ERROR"
+    )
+
+    return logger
+```
+### main.py
+```commandline
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+
+from src.db.pools import init_pools, close_pools
+from src.routers import webhook
+
+
+@asynccontextmanager
+async def lifespan(app):
+    await init_pools()
+    yield
+    await close_pools()
+
+
+app = FastAPI(lifespan=lifespan)
+app.include_router(webhook.router, prefix="/webhook")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=True)
+```
+### settings.py
+```commandline
+from pydantic_settings import BaseSettings
+from pydantic import ConfigDict, PostgresDsn
+from pathlib import Path
+
+
+class Settings(BaseSettings):
+    database_url: PostgresDsn
+    rabbitmq_url: str
+    log_dir: Path = Path("./logs")
+
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",  # рекомендуется явно указать кодировку
+        extra="forbid",  # или "ignore", но по умолчанию — "ignore"
+    )
+
+
+settings = Settings()
+```
