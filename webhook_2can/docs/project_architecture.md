@@ -1,5 +1,13 @@
 ## 📁 Структура проекта webhook_2can
 
+### 🎯 Цель
+- Приём вебхуков → сохранение в **legacy-БД `paydb`** (с JSONB, без изменений).
+- Управление учётными группами → в **новой БД `mydb`** (чистая, типизированная, без JSONB).
+- Полная изоляция двух потоков данных.
+- Готовность к расширению: авторизация, кэш, rate-limit — без переписывания ядра.
+
+---
+
 webhook_2can/  
 ├── .venv/                          # Виртуальное окружение Python (не коммитится)  
 ├── docs/  
@@ -92,6 +100,13 @@ async def handle_webhook(
     return {"status": "accepted"}
 ```
 
+```commandline
+# routers/webhook.py
+@router.post("")
+async def get_hook(result = Depends(process_webhook_payload)):
+    return result
+```
+
 ### src/schemas/webhook.py   
 Pydantic-модели:  
 WebhookSchema — с 5 обязательными полями, остальные Optional.  
@@ -117,6 +132,104 @@ class WebhookValidationError(HTTPException):
 Использует python:3.11-slim.  
 Копирует requirements.txt и src/.  
 Запускает через uvicorn src.main:app --host 0.0.0.0 --port 8000.  
+
+### ⚙️ Настройки: `.env` и `Settings`
+
+### `.env`
+```env
+DATABASE_URL=postgresql://my_login:my_pass@localhost:5432/paydb   # legacy
+MYDB_DSN=postgresql://my_login:my_pass@localhost:5432/mydb        # новая архитектура
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+LOG_DIR=./logs
+```
+
+### src/settings.py
+```commandline
+from pydantic import PostgresDsn
+from pydantic_settings import BaseSettings
+from pathlib import Path
+
+class Settings(BaseSettings):
+    # Legacy: для вебхуков
+    database_url: PostgresDsn
+
+    # Новая архитектура: для учётных записей
+    mydb_dsn: PostgresDsn
+
+    rabbitmq_url: str
+    log_dir: Path = Path("./logs")
+
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "forbid"  # ← все переменные должны быть объявлены!
+    }
+
+settings = Settings()
+```
+
+### 🗃 Базы данных
+
+| БД      | Назначение           | Схема     | Таблицы                     |
+|--------|----------------------|----------|----------------------------|
+| `paydb` | Приём вебхуков       | `to_can` | с JSONB (legacy)           |
+| `mydb`  | Учётные записи       | `accounts` | `users`, `user_groups`     |
+
+### 🔄 Поток данных
+
+### 1. Вебхук → paydb
+
+```commandline
+POST /webhook 
+  → schemas.WebhookPayload 
+  → dependencies.webhook.process_webhook_payload 
+  → services.db_service.call_webhook_function 
+  → PostgreSQL: to_can.f_syspay(payload::json)
+```
+### 🧩 Управление подключениями к БД
+
+### src/db/pools.py
+
+```commandline
+# Два независимых пула:
+_main_db_pool      # → paydb (вебхуки)
+_accounts_db_pool  # → mydb (учётные записи)
+
+# Инициализация:
+await init_pools()      # создаёт оба
+await close_pools()     # закрывает оба
+```
+
+### src/dependencies/db.py
+
+```commandline
+def get_db_pool() -> Pool:             # → paydb
+def get_accounts_db_pool_dep() -> Pool # → mydb
+```
+✅ Полная изоляция: вебхук не может случайно записать в mydb. 
+
+### 🛡 Обработка ошибок
+
+### Кастомные исключения (src/exceptions/exceptions.py)
+
+WebhookProcessingError → 500  
+InvalidWebhookData → 400    
+DatabaseError → 503  
+Логируются через loguru с ротацией и архивацией.   
+
+### ▶️ запуск:
+
+```commandline
+python3 -m src.main
+```
+
+### Swagger UI: http://localhost:8000/docs   
+### Логи: ./logs/webhook.log
+
+### Этот документ:
+- **Фиксирует текущее состояние** проекта,
+- **Объясняет архитектурные решения**,
+- **Гарантирует масштабируемость** без технического
 
 ## 💡 Особенности, соответствующие стилю
 Чёткое разделение слоёв: роут → сервис → БД/очередь.  
