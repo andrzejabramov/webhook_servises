@@ -1,4 +1,3 @@
-import hashlib
 from datetime import datetime, timedelta, timezone
 from app.db.functions import get_active_user_contact_by_value, create_refresh_token
 from app.utils.security import (
