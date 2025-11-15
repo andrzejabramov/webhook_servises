@@ -71,7 +71,7 @@ $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
 
-ALTER FUNCTION "to_can"."f_syspay"("x_json" json) OWNER TO "andrzejvod";
+ALTER FUNCTION "to_can"."f_syspay"("x_json" json) OWNER TO "xxxxxxxx";
 ```
 функция f_payment(x_ins json)
 ```commandline
