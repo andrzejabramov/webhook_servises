@@ -16,7 +16,7 @@ CREATE TABLE "auth"."refresh_tokens" (
 ;
 
 ALTER TABLE "auth"."refresh_tokens" 
-  OWNER TO "andrzejvod";
+  OWNER TO "xxxxxxxx";
 
 CREATE INDEX "idx_refresh_tokens_expires" ON "auth"."refresh_tokens" USING btree (
   "expires_at" "pg_catalog"."timestamptz_ops" ASC NULLS LAST
