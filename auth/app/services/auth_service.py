@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+
+from app.redis.client import get_redis_client
 from app.db.functions import get_active_user_contact_by_value, create_refresh_token
 from app.utils.security import (
     verify_password,
@@ -36,3 +38,7 @@ async def authenticate_user(login: str, password: str | None = None) -> dict | N
         "access_token": access_token,
         "refresh_token": refresh_token,
     }
+
+async def revoke_token(jti: str, expire: int):
+    redis = await get_redis_client()
+    await redis.setex(f"revoked:{jti}", expire, "1")

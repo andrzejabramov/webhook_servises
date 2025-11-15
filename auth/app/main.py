@@ -15,3 +15,8 @@ app = FastAPI(
 )
 
 app.include_router(auth_router, prefix="/api/v1/auth")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)

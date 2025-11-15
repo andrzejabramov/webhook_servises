@@ -1,6 +1,6 @@
 # postgers_db
 
-## tables
+## users - tables
 
 ### contact_types
 ```commandline
