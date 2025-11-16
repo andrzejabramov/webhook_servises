@@ -7,7 +7,6 @@ from app.utils.security import (
     create_access_token,
     create_refresh_token as gen_refresh,
     normalize_login,
-    hash_token,
 )
 
 async def authenticate_user(login: str, password: str | None = None) -> dict | None:

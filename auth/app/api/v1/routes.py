@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends
+from datetime import datetime, timedelta, timezone
 
 from app.schemas.auth import (
     LoginRequest,
@@ -15,8 +16,9 @@ from app.db.functions import (
     blacklist_access_token
 )
 from app.services.auth_service import authenticate_user
-from app.utils.security import create_access_token, hash_token
-from app.api.v1.deps import get_redis_client
+from app.utils.security import create_access_token, hash_token, create_refresh_token
+from app.api.v1.deps import get_redis_client, get_current_user
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -49,7 +51,7 @@ async def refresh(request: RefreshRequest):
         )
     # Генерируем новые токены
     new_access = create_access_token(user_id)
-    new_refresh, new_refresh_hash = create_refresh_token_tuple()
+    new_refresh, new_refresh_hash = create_refresh_token()
     expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     # Сохраняем новый refresh
     await rotate_refresh_token(user_id, new_refresh_hash, expires_at.isoformat())

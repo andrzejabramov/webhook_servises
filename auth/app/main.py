@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
 from app.api.v1.routes import router as auth_router
-from app.core.config import settings
 from app.db.pool import close_pool
 from app.redis.client import close_redis_client
 
