@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 from app.db.pool import get_pool
-from app.redis.client import get_redis
+from app.redis.client import get_redis_client
 from app.utils.security import decode_access_token
 
 
@@ -10,9 +10,6 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/routers/login")
 
 async def get_db_pool():
     return await get_pool()
-
-async def get_redis_client():
-    return await get_redis()
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),

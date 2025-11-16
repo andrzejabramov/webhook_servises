@@ -1,12 +1,16 @@
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
+
 from app.api.v1.routes import router as auth_router
 from app.core.config import settings
-from contextlib import asynccontextmanager
 from app.db.pool import close_pool
+from app.redis.client import close_redis_client
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
+    await close_redis_client()
     await close_pool()
 
 app = FastAPI(
