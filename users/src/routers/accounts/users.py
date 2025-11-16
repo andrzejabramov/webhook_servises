@@ -1,13 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    Body,
+)
 from asyncpg import Pool
 from uuid import UUID
 
 from src.services.users import UserService
-from src.schemas.users import UserCreate, UserUpdate, UserRead
 from src.dependencies.db import get_accounts_db_pool_dep
+from src.schemas.users import (
+    UserCreate,
+    UserUpdate,
+    UserRead,
+    BulkCreateRequest,
+    BulkCreateResult,
+)
 
 
-router = APIRouter(prefix="/accounts/users", tags=["Accounts: Users"])
+router = APIRouter(tags=["Accounts: Users"])
 
 async def get_user_service(pool: Pool = Depends(get_accounts_db_pool_dep)) -> UserService:
     return UserService(pool)
@@ -36,5 +48,16 @@ async def update_user(
     return await service.update(
         user_id=user_id,
         profile=user_update.profile,      # ← dict или None
-        is_active=user_update.is_active   # ← bool или None
+        is_active=user_update.is_active,   # ← bool или None
     )
+
+@router.post("/bulk", response_model=BulkCreateResult)
+async def bulk_create_users(
+        request: BulkCreateRequest,
+        service: UserService = Depends(get_user_service),
+):
+    try:
+        return await service.bulk_create_users(interface=request.interface, users=request.users)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

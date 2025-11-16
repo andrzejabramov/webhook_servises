@@ -10,9 +10,9 @@ router = APIRouter()
 
 # Подключаем подмодули с их внутренними префиксами
 router.include_router(user_groups_router, prefix="/user-groups")
-router.include_router(users_router)
-router.include_router(memberships_router)
-router.include_router(user_contacts_router)
-router.include_router(contact_types_router)
+router.include_router(users_router, prefix="/users")          # ← вот здесь!
+router.include_router(memberships_router, prefix="/memberships")
+router.include_router(user_contacts_router, prefix="/contacts")
+router.include_router(contact_types_router, prefix="/contact-types")
 
 

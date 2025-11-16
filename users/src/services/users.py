@@ -1,9 +1,11 @@
+from fastapi import Depends
 from asyncpg import Pool
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
 from src.utils.json_utils import normalize_user_row, maybe_json_dumps, maybe_json_loads
-from src.schemas.users import UserCreate, UserUpdate, UserRead
+from src.schemas.users import UserCreate, UserUpdate, UserRead, BulkUserItem
+from src.dependencies.db import get_accounts_db_pool_dep
 
 
 class UserService:
@@ -49,5 +51,59 @@ class UserService:
                 profile_json,
             )
         return UserRead(**normalize_user_row(row)) if row else None
+
+    async def bulk_create_users(
+            self,
+            interface: str,
+            users: List[BulkUserItem],
+    ):
+        created = skipped = 0
+        errors = []
+
+        allowed_interfaces = {"driver", "courier"}
+        if interface not in allowed_interfaces:
+            raise ValueError(f"interface must be one of {allowed_interfaces}")
+
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                for idx, user in enumerate(users):
+                    try:
+                        payload = {
+                            "phone": user.phone,
+                            "group_names": [interface],
+                        }
+                        if user.external_id is not None:
+                            payload["profile"] = {"external_id": user.external_id}
+
+                        json_payload = maybe_json_dumps(payload)
+
+                        row = await conn.fetchrow(
+                             "SELECT status, user_id FROM accounts.create_user_bulk_stub($1::jsonb)",
+                            json_payload,
+                        )
+
+                        if row["status"] == "created":
+                            created += 1
+                        elif row["status"] == "skipped":
+                            skipped += 1
+                        else:
+                            errors.append({
+                                "index": idx,
+                                "phone": user.phone,
+                                "reason": f"unexpected status: {row['status']}"
+                            })
+
+                    except Exception as e:
+                        errors.append({
+                            "index": idx,
+                            "phone": user.phone,
+                            "reason": str(e)
+                        })
+
+        return {"created": created, "skipped": skipped, "errors": errors}
+
+def get_user_service(pool: Pool = Depends(get_accounts_db_pool_dep)) -> UserService:
+    return UserService(pool)
+
 
 
