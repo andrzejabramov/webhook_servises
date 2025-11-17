@@ -6,6 +6,7 @@ from fastapi import (
     Body,
     UploadFile,
     File,
+    Query,
 )
 from asyncpg import Pool
 from uuid import UUID
@@ -13,6 +14,7 @@ from uuid import UUID
 from src.services.users import UserService, bulk_create_users_from_file
 from src.dependencies.db import get_accounts_db_pool_dep
 from src.dependencies.upload import validate_upload_file
+from src.schemas.common import PaginatedResponse
 from src.schemas.users import (
     UserCreate,
     UserUpdate,
@@ -32,9 +34,13 @@ async def get_user_service(pool: Pool = Depends(get_accounts_db_pool_dep)) -> Us
 async def create_user(user: UserCreate, service: UserService = Depends(get_user_service)):
     return await service.create(user)
 
-@router.get("/", response_model=list[UserRead])
-async def list_users(service: UserService = Depends(get_user_service)):
-    return await service.get_all()
+@router.get("/", response_model=PaginatedResponse[UserRead])
+async def get_user_list(
+        page: int = Query(1, ge=1, description="Номер страницы"),
+        size: int = Query(50, ge=1, le=100, description="Размер страницы (макс. 100)"),
+        service: UserService = Depends(get_user_service)
+):
+    return await service.get_paginated(page=page, size=size)
 
 @router.patch("/{user_id}", response_model=UserRead)
 async def update_user(

@@ -26,9 +26,9 @@ class UserRead(UserBase):
 
     model_config = {"from_attributes": True}
 
-from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator
-import phonenumbers
+class UserReadExtended(UserRead):
+    contacts: Dict[str, str] = Field(default_factory=dict)  # {"phone": "...", "email": "..."}
+    groups: List[str] = Field(default_factory=list)  # ["client", "driver"]
 
 class BulkUserItem(BaseModel):
     phone: str

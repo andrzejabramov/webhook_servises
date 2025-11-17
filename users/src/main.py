@@ -5,6 +5,7 @@ from src.db.pools import init_pools, close_pools
 from src.routers.accounts import router as accounts_router
 from src.settings import settings
 from src.logger_config import setup_logger
+from core.handlers import register_exceptions_handlers
 
 
 logger = setup_logger()
@@ -18,6 +19,9 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan)
+
+# Регистрируем обработчики исключений ДО подключения роутеров (рекомендуется, но не критично)
+register_exception_handlers(app)
 app.include_router(accounts_router, prefix="/accounts")
 
 

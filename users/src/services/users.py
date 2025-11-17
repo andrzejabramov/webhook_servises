@@ -4,6 +4,8 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 import logging
 
+from src.utils.json_utils import maybe_json_loads
+from src.schemas.common import PaginatedResponse
 from src.dependencies.db import get_accounts_db_pool_dep
 from src.utils.json_utils import (
     normalize_user_row,
@@ -17,6 +19,7 @@ from src.schemas.users import (
     BulkUserItem,
     UserBulkCreateRow,
     UploadResult,
+    UserReadExtended,
 )
 
 
@@ -115,6 +118,42 @@ class UserService:
                         })
 
         return {"created": created, "skipped": skipped, "errors": errors}
+
+    async def get_paginated(self, page: int, size: int) -> PaginatedResponse[UserReadExtended]:
+        """
+        Возвращает пагинированный список пользователей с агрегированными контактами и группами.
+        Использует PostgreSQL-функцию accounts.get_users_with_relations.
+        """
+        if page < 1 or size < 1:
+            raise ValueError("page и size должны быть >= 1")
+        if size > 100:
+            raise ValueError("size не может быть больше 100")
+
+        offset = (page - 1) * size
+
+        rows = await self.pool.fetch(
+            "SELECT * FROM accounts.get_users_with_relations($1, $2)",
+            size, offset
+        )
+
+        total = await self.pool.fetchval("SELECT accounts.count_users()")
+
+        items = []
+        for row in rows:
+            d = dict(row)
+            # profile может быть JSONB → приводим к dict
+            d["profile"] = maybe_json_loads(d.get("profile"))
+            # contacts и groups уже приходят в правильном формате из БД
+            items.append(UserReadExtended(**d))
+
+        pages = (total + size - 1) // size
+        return PaginatedResponse(
+            items=items,
+            total=total,
+            page=page,
+            size=size,
+            pages=pages
+        )
 
 def get_user_service(pool: Pool = Depends(get_accounts_db_pool_dep)) -> UserService:
     return UserService(pool)
