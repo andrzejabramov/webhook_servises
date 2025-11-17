@@ -83,7 +83,7 @@ async def invalidate_all_refresh_tokens(user_id: str) -> None:
     """Удаляет все refresh-токены пользователя (logout с любого устройства)"""
     pool = await get_pool()
     await pool.execute(
-        "DELETE FROM auth.refresh_tokens WHERE user_id = $1",
+        "SELECT auth.invalidate_all_refresh_tokens($1)",
         user_id
     )
 

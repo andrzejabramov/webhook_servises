@@ -53,3 +53,22 @@ class BulkCreateResult(BaseModel):
     created: int
     skipped: int
     errors: List[dict]
+
+class UserBulkCreateRow(BaseModel):
+    """
+    Строка из файла загрузки: phone + user_groups.
+    user_groups — строка вида "client,driver" (через запятую).
+    """
+    phone: str = Field(..., min_length=10, max_length=15, pattern=r"^\+?[0-9\s\-\(\)]+$")
+    user_groups: str = Field(..., min_length=1)
+
+class UploadResult(BaseModel):
+    """
+    Результат bulk-загрузки: сколько успешно, сколько ошибок.
+    """
+    success_count: int
+    error_count: int
+    errors: List[str] = Field(
+        default_factory=list,
+        description="Список ошибок в формате: 'строка 5: причина'"
+    )

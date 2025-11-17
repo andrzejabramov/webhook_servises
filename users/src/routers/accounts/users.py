@@ -4,18 +4,22 @@ from fastapi import (
     HTTPException,
     status,
     Body,
+    UploadFile,
+    File,
 )
 from asyncpg import Pool
 from uuid import UUID
 
-from src.services.users import UserService
+from src.services.users import UserService, bulk_create_users_from_file
 from src.dependencies.db import get_accounts_db_pool_dep
+from src.dependencies.upload import validate_upload_file
 from src.schemas.users import (
     UserCreate,
     UserUpdate,
     UserRead,
     BulkCreateRequest,
     BulkCreateResult,
+    UploadResult,
 )
 
 
@@ -61,3 +65,10 @@ async def bulk_create_users(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.post("/bulk/upload", response_model=UploadResult)
+async def bulk_create_users_upload(file: UploadFile = Depends(validate_upload_file)):
+    """
+    Загружает файл с колонками: phone, user_groups.
+    Пример user_groups: "client,driver" (через запятую).
+    """
+    return await process_user_groups_bulk_upload(file)
