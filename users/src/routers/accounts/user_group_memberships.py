@@ -5,6 +5,7 @@ from typing import List
 
 from src.dependencies.db import get_accounts_db_pool_dep
 from src.services.user_group_memberships import UserGroupMembershipService
+from src.exceptions.exceptions import NotFoundError
 from src.schemas.user_group_memberships import (
     UserGroupMembershipCreate,
     UserGroupMembershipRead,
@@ -43,7 +44,7 @@ async def get_membership(
 ):
     membership = await service.get(user_id, group_id)
     if not membership:
-        raise HTTPException(status_code=404, detail="Membership not found")
+        raise NotFoundError("Membership", f"{user_id}/{group_id}")
     return membership
 
 

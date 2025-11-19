@@ -15,6 +15,7 @@ from src.services.users import UserService, bulk_create_users_from_file
 from src.dependencies.db import get_accounts_db_pool_dep
 from src.dependencies.upload import validate_upload_file
 from src.schemas.common import PaginatedResponse
+from src.exceptions.exceptions import ValidationError
 from src.schemas.users import (
     UserCreate,
     UserUpdate,
@@ -69,7 +70,7 @@ async def bulk_create_users(
     try:
         return await service.bulk_create_users(interface=request.interface, users=request.users)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError("bulk_create", "users", str(e))
 
 @router.post("/bulk/upload", response_model=UploadResult)
 async def bulk_create_users_upload(file: UploadFile = Depends(validate_upload_file)):

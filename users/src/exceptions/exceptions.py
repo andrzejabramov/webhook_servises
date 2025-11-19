@@ -45,6 +45,14 @@ class DatabaseError(AppException):
             details={},
         )
 
+class FileUploadError(AppException):
+    def __init__(self, message: str):
+        super().__init__(
+            message=message,
+            status_code=400,
+            error_code="FILE_UPLOAD_ERROR",
+            details={},
+        )
 
 # === Специфичные ошибки users ===
 
@@ -73,3 +81,7 @@ class ContactTypeConflict(AppException):
             error_code="CONTACT_TYPE_CONFLICT",
             details={"contact_type": contact_type, "user_id": user_id},
         )
+
+class ContactNotFound(NotFoundError):
+    def __init__(self, contact_id: str):
+        super().__init__("Contact", contact_id)

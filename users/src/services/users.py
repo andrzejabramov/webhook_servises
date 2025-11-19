@@ -7,6 +7,7 @@ import logging
 from src.utils.json_utils import maybe_json_loads
 from src.schemas.common import PaginatedResponse
 from src.dependencies.db import get_accounts_db_pool_dep
+from src.exceptions.exceptions import ValidationError
 from src.utils.json_utils import (
     normalize_user_row,
     maybe_json_dumps,
@@ -79,7 +80,7 @@ class UserService:
 
         allowed_interfaces = {"driver", "courier"}
         if interface not in allowed_interfaces:
-            raise ValueError(f"interface must be one of {allowed_interfaces}")
+            raise ValidationError("interface", interface, f"interface must be one of {allowed_interfaces}")
 
         async with self.pool.acquire() as conn:
             async with conn.transaction():
@@ -116,8 +117,7 @@ class UserService:
                             "phone": user.phone,
                             "reason": str(e)
                         })
-
-        return {"created": created, "skipped": skipped, "errors": errors}
+                        logger.error(f"Bulk create error for phone {user.phone}: {e}")
 
     async def get_paginated(self, page: int, size: int) -> PaginatedResponse[UserReadExtended]:
         """
@@ -125,9 +125,9 @@ class UserService:
         Использует PostgreSQL-функцию accounts.get_users_with_relations.
         """
         if page < 1 or size < 1:
-            raise ValueError("page и size должны быть >= 1")
+            raise ValidationError("pagination", f"page={page}, size={size}", "page и size должны быть >= 1")
         if size > 100:
-            raise ValueError("size не может быть больше 100")
+            raise ValidationError("pagination", str(size), "size не может быть больше 100")
 
         offset = (page - 1) * size
 
@@ -179,7 +179,8 @@ async def bulk_create_users_from_file(file: UploadFile) -> UploadResult:
             # Парсим группы
             groups = [g.strip() for g in validated.user_groups.split(",") if g.strip()]
             if not groups:
-                raise ValueError("Поле user_groups не содержит валидных групп")
+                raise ValidationError("user_groups", validated.user_groups,
+                                      "Поле user_groups не содержит валидных групп")
 
             # 🔜 Здесь будет вызов PostgreSQL-функции, например:
             # await assign_groups_by_phone(validated.phone, groups)
@@ -188,6 +189,7 @@ async def bulk_create_users_from_file(file: UploadFile) -> UploadResult:
 
         except Exception as e:
             phone_display = raw_row.get("phone", "N/A")
+            logger.error(f"File upload error at row {idx}: {e}")
             errors.append(f"строка {idx} (phone='{phone_display}'): {str(e)}")
 
     return UploadResult(

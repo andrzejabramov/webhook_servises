@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body
 from asyncpg import Pool
 
 from src.services.user_groups import UserGroupService
+from src.exceptions.exceptions import GroupNotFound
 from src.schemas.user_groups import UserGroupCreate, UserGroupUpdate, UserGroupRead
 from src.dependencies.db import get_accounts_db_pool_dep  # ← должен возвращать Pool из app.state.db_pool
 
@@ -51,5 +52,5 @@ async def update_group(
 ):
     updated = await service.update(group_id, group_update)
     if not updated:
-        raise HTTPException(status_code=404, detail="User group not found or update failed")
+        raise GroupNotFound(group_id=str(group_id))
     return updated

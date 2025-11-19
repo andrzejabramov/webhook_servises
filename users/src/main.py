@@ -5,7 +5,7 @@ from src.db.pools import init_pools, close_pools
 from src.routers.accounts import router as accounts_router
 from src.settings import settings
 from src.logger_config import setup_logger
-from core.handlers import register_exceptions_handlers
+from src.core.handlers import register_exception_handlers
 
 
 logger = setup_logger()

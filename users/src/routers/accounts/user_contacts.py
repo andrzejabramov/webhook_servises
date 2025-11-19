@@ -29,7 +29,7 @@ async def get_contact(
 ):
     contact = await service.get_by_id(contact_id)
     if not contact:
-        raise HTTPException(status_code=404, detail="Contact not found")
+        raise ContactNotFound(contact_id=str(contact_id))
     return contact
 
 
