@@ -81,8 +81,6 @@ async def register(request: RegisterRequest):
             refresh_token=refresh_token
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ValueError as e:
         # Ловим уникальность, отсутствие групп и т.д.
         err_msg = str(e)
         if "already exists" in err_msg:
