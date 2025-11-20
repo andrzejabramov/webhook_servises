@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.middleware.request_id import RequestIDMiddleware
+from app.middleware.logging import LoggingMiddleware
 from app.api.v1.routes import router as auth_router
 from app.db.pool import close_pool
 from app.redis.client import close_redis_client
@@ -33,6 +36,16 @@ app = FastAPI(
 @app.exception_handler(BaseAPIException)
 async def base_api_exception_handler(request, exc: BaseAPIException):
     return exc  # BaseAPIException наследуется от HTTPException → FastAPI сам сериализует
+
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["POST"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 app.include_router(auth_router, prefix="/api/v1/auth")
 

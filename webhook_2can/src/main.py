@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
+from src.middleware.request_id import RequestIDMiddleware
+from src.middleware.logging import LoggingMiddleware
 from src.db.pools import init_pools, close_pools
 from src.routers import webhook
 from src.exceptions import (
@@ -50,6 +53,16 @@ async def base_webhook_exception_handler(request, exc: BaseWebhookException):
         status_code=500,
         content={"detail": exc.detail}
     )
+
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # ← ограничь в продакшене!
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(webhook.router, prefix="/webhook")
 
