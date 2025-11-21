@@ -1,7 +1,9 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:16
-    container_name: dev-postgres
+    container_name: db-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -30,18 +32,66 @@ services:
     networks:
       - backend
 
+  redis:
+    image: redis:7-alpine
+    container_name: dev-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  auth:
+    build: ./auth
+    container_name: dev-auth
+    ports:
+      - "8001:8001"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: HS256
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+
+  users:
+    build: ./users
+    container_name: dev-users
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+
   webhook:
-    build: webhook_2can
+    build: ./webhook_2can
     container_name: dev-webhook
     ports:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
-
     depends_on:
-      - postgres
-      - rabbitmq
+      postgres:
+        condition: service_healthy
     networks:
       - backend
 

@@ -8,14 +8,21 @@ from fastapi import (
     File,
     Query,
 )
+from loguru import logger
 from asyncpg import Pool
 from uuid import UUID
 
-from src.services.users import UserService, bulk_create_users_from_file
+from src.services.users import (
+    UserService,
+    bulk_create_users_from_file,
+    UserDetailRead,
+)
+from src.db.redis import redis
+from src.utils.json_utils import maybe_json_loads, maybe_json_dumps
 from src.dependencies.db import get_accounts_db_pool_dep
 from src.dependencies.upload import validate_upload_file
 from src.schemas.common import PaginatedResponse
-from src.exceptions.exceptions import ValidationError
+from src.exceptions.exceptions import ValidationError, UserNotFound
 from src.schemas.users import (
     UserCreate,
     UserUpdate,
@@ -79,3 +86,92 @@ async def bulk_create_users_upload(file: UploadFile = Depends(validate_upload_fi
     Пример user_groups: "client,driver" (через запятую).
     """
     return await process_user_groups_bulk_upload(file)
+
+@router.get("/by-identifier", response_model=UserDetailRead)
+async def get_user_by_identifier(
+    identifier: str = Query(..., min_length=1, max_length=255, description="UUID, email, phone (+7...), or second_login"),
+    pool: Pool = Depends(get_accounts_db_pool_dep)
+):
+    cache_key = f"user_by_id:{identifier}"
+    cached = await redis.get(cache_key)
+    if cached:
+        logger.debug(f"Cache hit for identifier: {identifier}")
+        data = json.loads(cached)
+        data["profile"] = maybe_json_loads(data.get("profile"))
+        return UserDetailRead(**data)
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM accounts.get_user_by_identifier_v1($1)",
+            identifier
+        )
+        if not row:
+            raise UserNotFound(user_id=identifier)
+
+    # Формируем ответ
+    user_dict = {
+        "id": row["id"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "is_active": row["is_active"],
+        "profile": row["profile"],
+        "groups": row["groups"],
+        "contacts": row["contacts"],
+    }
+
+    # Подготовка к кэшированию
+    cache_data = user_dict.copy()
+    cache_data["profile"] = maybe_json_dumps(cache_data["profile"])
+
+    # Кэшируем на 10 минут
+    await redis.setex(cache_key, 600, json.dumps(cache_data, default=str))
+    logger.info(f"Cached user by identifier: {identifier}")
+
+    @router.get("/by-identifier", response_model=UserDetailRead)
+    async def get_user_by_identifier(
+            identifier: str = Query(..., min_length=1, max_length=255,
+                                    description="UUID, email, phone (+7...), or second_login"),
+            pool: Pool = Depends(get_accounts_db_pool_dep)
+    ):
+        cache_key = f"user_by_id:{identifier}"
+        cached = await redis.get(cache_key)
+        if cached:
+            logger.debug(f"Cache hit for identifier: {identifier}")
+            data = json.loads(cached)
+            data["profile"] = maybe_json_loads(data.get("profile"))
+            return UserDetailRead(**data)
+
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM accounts.get_user_by_identifier_v1($1)",
+                identifier
+            )
+            if not row:
+                raise UserNotFound(user_id=identifier)
+
+        # Формируем ответ
+        user_dict = {
+            "id": row["id"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "is_active": row["is_active"],
+            "profile": row["profile"],
+            "groups": row["groups"],
+            "contacts": row["contacts"],
+        }
+
+        # Подготовка к кэшированию
+        cache_data = user_dict.copy()
+        cache_data["profile"] = maybe_json_dumps(cache_data["profile"])
+
+        # Кэшируем на 10 минут
+        await redis.setex(cache_key, 600, json.dumps(cache_data, default=str))
+        logger.info(f"Cached user by identifier: {identifier}")
+
+        @router.get("/by-identifier", response_model=UserDetailRead)
+        async def get_user_by_identifier(
+                identifier: str = Query(..., min_length=1, max_length=255,
+                                        description="UUID, email, phone (+7...), or second_login"),
+                pool: Pool = Depends(get_accounts_db_pool_dep)
+        ):
+            return await get_user_by_identifier_cached(identifier, pool)

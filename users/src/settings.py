@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from pydantic import ConfigDict, PostgresDsn, Field
+from pydantic import ConfigDict, PostgresDsn, Field, RedisDsn
 from pathlib import Path
 from typing import Set
 
@@ -7,6 +7,10 @@ from typing import Set
 class Settings(BaseSettings):
     mydb_dsn: PostgresDsn
     rabbitmq_url: str
+    redis_url: RedisDsn = Field(
+        default="redis://localhost:6379/1",
+        alias="REDIS_URL",
+    )  # используем DB=1
     log_dir: Path = Path("./logs")
 
     # Настройки загрузки файлов (общие для всех сервисов с bulk-операциями)

@@ -72,3 +72,38 @@ class UploadResult(BaseModel):
         default_factory=list,
         description="Список ошибок в формате: 'строка 5: причина'"
     )
+
+class UserGroupItem(BaseModel):
+    id: UUID4
+    name: str
+
+class UserContactItem(BaseModel):
+    id: UUID4
+    type: str  # имя типа контакта
+    value: str
+
+class UserDetailRead(BaseModel):
+    id: UUID4
+    created_at: datetime
+    updated_at: Optional[datetime]
+    is_active: bool
+    profile: Optional[dict[str, Any]] = None
+    groups: List[UserGroupItem]
+
+    class UserGroupItem(BaseModel):
+        id: UUID4
+        name: str
+
+    class UserContactItem(BaseModel):
+        id: UUID4
+        type: str  # имя типа контакта
+        value: str
+
+    class UserDetailRead(BaseModel):
+        id: UUID4
+        created_at: datetime
+        updated_at: Optional[datetime]
+        is_active: bool
+        profile: Optional[dict[str, Any]] = None
+        groups: List[UserGroupItem]
+        contacts: List[UserContactItem]
