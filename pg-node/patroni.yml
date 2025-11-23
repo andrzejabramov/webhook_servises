@@ -33,10 +33,10 @@ postgresql:
   bin_dir: /usr/lib/postgresql/16/bin
   authentication:
     replication:
-      username: XXXXXXXXXX
-      password: XXXXXXXXXXX
+      username: replicator
+      password: repPass123
     superuser:
-      username: XXXXXXXXX
-      password: XXXXXXXXXXX
+      username: postgres
+      password: mysecretpassword
   parameters:
     shared_preload_libraries: pg_stat_statements

@@ -1,0 +1,392 @@
+app/api/v1/__init__.py
+```
+```
+
+app/api/v1/deps.py
+```
+from app.db.pool import get_pool
+from app.redis.client import get_redis
+
+async def get_db_pool():
+    return await get_pool()
+
+async def get_redis_client():
+    return await get_redis()
+```
+
+app/api/v1/routes.py
+```
+from fastapi import APIRouter, HTTPException, status
+
+from app.schemas.auth import (
+    LoginRequest,
+    TokenResponse,
+    RefreshRequest,
+    RegisterRequest,
+)
+from app.services.auth_service import authenticate_user
+from app.db.functions import consume_refresh_token, register_user_with_refresh
+from app.utils.security import create_access_token, hash_token
+
+router = APIRouter()
+
+@router.post("/login", response_model=TokenResponse)
+async def login(request: LoginRequest):
+    if not request.password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password is required for now"
+        )
+    user = await authenticate_user(request.login, request.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    return TokenResponse(
+        access_token=user["access_token"],
+        refresh_token=user["refresh_token"]
+    )
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(request: RefreshRequest):
+    token_hash = hash_token(request.refresh_token)
+    try:
+        user_id = await consume_refresh_token(token_hash)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token"
+        )
+    new_access = create_access_token(user_id)
+    # Новый refresh не выдаём (одноразовый)
+    # Или выдаём — по вашему выбору
+    return TokenResponse(
+        access_token=new_access,
+        refresh_token=""  # или сгенерировать новый
+    )
+
+@router.post("/register", response_model=TokenResponse)
+async def register(request: RegisterRequest):
+    try:
+        # Подготавливаем payload без пароля (он хешируется внутри)
+        payload = {
+            "second_login": request.second_login,
+            "phone": request.phone,
+            "email": request.email,
+            "profile": request.profile or {},
+            "group_names": request.group_names,
+        }
+        user, refresh_token = await register_user_with_refresh(payload, request.password)
+        access_token = create_access_token(str(user["id"]))
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # Ловим уникальность, отсутствие групп и т.д.
+        err_msg = str(e)
+        if "already exists" in err_msg or "not found" in err_msg:
+            raise HTTPException(status_code=400, detail=err_msg)
+        raise HTTPException(status_code=500, detail="Registration failed")
+```
+
+app/core/config.py
+```
+import os
+from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
+
+
+load_dotenv()
+
+class Settings(BaseSettings):
+    # PostgreSQL
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_HOST: str
+    POSTGRES_PORT: str = "5432"
+    POSTGRES_DB: str
+
+    # Redis
+    REDIS_HOST: str
+    REDIS_PORT: str = "6379"
+    REDIS_DB: str = "0"
+
+    # JWT
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
+    @property
+    def DATABASE_URL(self) -> str:
+        return (
+            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
+    @property
+    def REDIS_URL(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
+    class Config:
+        env_file = os.getenv("ENV_FILE", ".env")
+
+settings = Settings()
+```
+
+app/db/functions.py
+```
+from datetime import datetime, timezone, timedelta
+from asyncpg import Record
+import json
+
+from app.core.config import settings
+from app.utils.security import hash_password, create_refresh_token as gen_refresh_token
+from app.db.pool import get_pool
+
+# ------------------------
+# AUTH SERVICE FUNCTIONS
+# ------------------------
+
+async def get_active_user_contact_by_value(value: str) -> Record | None:
+    """
+    Получает активный контакт (second_login/email/phone) и связанные данные пользователя.
+    Использует функцию accounts.get_active_user_contact_by_value (или аналогичную).
+    """
+    pool = await get_pool()
+    # ⚠️ Важно: в схеме accounts должна существовать такая функция!
+    # Если её нет — нужно создать (см. ниже рекомендацию).
+    return await pool.fetchrow(
+        "SELECT * FROM accounts.get_active_user_contact_by_value($1)",
+        value
+    )
+
+async def register_user_with_refresh(payload: dict, password: str) -> tuple[Record, str]:
+    """
+    Создаёт пользователя в accounts и сохраняет refresh токен в auth — в одной транзакции.
+    """
+    pool = await get_pool()
+    password_hash = hash_password(password)
+    full_payload = {**payload, "password_hash": password_hash}
+
+    refresh_token, refresh_hash = gen_refresh_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # 1. Создаём пользователя + контакты + группы
+            user = await conn.fetchrow(
+                "SELECT * FROM accounts.create_user_with_relations($1::jsonb)",
+                json.dumps(full_payload, ensure_ascii=False, separators=(',', ':'))
+            )
+            # 2. Сохраняем refresh в auth.refresh_tokens
+            await conn.execute(
+                "SELECT auth.create_refresh_token($1, $2, $3)",
+                str(user["id"]), refresh_hash, expires_at.isoformat()
+            )
+    return user, refresh_token
+
+async def create_refresh_token(user_id: str, token_hash: str, expires_at: str) -> None:
+    """
+    Сохраняет refresh token (вызывается после логина/регистрации).
+    """
+    pool = await get_pool()
+    await pool.execute(
+        "SELECT auth.create_refresh_token($1, $2, $3)",
+        user_id, token_hash, expires_at
+    )
+
+async def consume_refresh_token(token_hash: str) -> str:
+    """
+    Помечает refresh token как использованный и возвращает user_id.
+    """
+    pool = await get_pool()
+    user_id = await pool.fetchval(
+        "SELECT auth.consume_refresh_token($1)",
+        token_hash
+    )
+    if not user_id:
+        raise ValueError("Invalid refresh token")
+    return str(user_id)
+```
+
+app/db/pool.py
+```
+from asyncpg import create_pool, Pool
+from app.core.config import settings
+
+_pool: Pool | None = None
+
+async def get_pool() -> Pool:
+    global _pool
+    if _pool is None:
+        _pool = await create_pool(dsn=settings.DATABASE_URL, min_size=5, max_size=20)
+    return _pool
+
+async def close_pool() -> None:
+    global _pool
+    if _pool:
+        await _pool.close()
+        _pool = None
+```
+
+app/excentions
+```
+```
+
+app/redis/client.py
+```
+
+```
+
+app/schemas/auth.py
+```
+from pydantic import BaseModel, Field
+from typing import Optional, List, Any
+
+
+class LoginRequest(BaseModel):
+    login: str = Field(..., example="user123 or user@example.com or +79991234567")
+    password: str | None = Field(None, example="secret")
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+class RegisterRequest(BaseModel):
+    second_login: str = Field(..., min_length=3, max_length=64)
+    phone: str = Field(..., min_length=10, max_length=20)
+    email: Optional[str] = Field(
+        None,
+        pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    )
+    profile: Optional[dict[str, Any]] = None
+    password: str = Field(..., min_length=8)
+    group_names: List[str] = Field(
+        ...,
+        min_items=1,
+        example=["customer"]
+    )
+```
+
+app/services/auth_service.py
+```
+from datetime import datetime, timedelta, timezone
+from app.db.functions import get_active_user_contact_by_value, create_refresh_token
+from app.utils.security import (
+    verify_password,
+    create_access_token,
+    create_refresh_token as gen_refresh,
+    normalize_login,
+    hash_token,
+)
+
+async def authenticate_user(login: str, password: str | None = None) -> dict | None:
+    normalized = normalize_login(login)
+    contact = await get_active_user_contact_by_value(normalized)
+    if not contact:
+        return None
+
+    user_id = str(contact["user_id"])
+    password_hash = contact["password_hash"]
+
+    # Если пароль не требуется (например, для phone) — пропускаем проверку
+    # Но в текущей логике: пароль нужен для second_login/email
+    if password is not None:
+        if not password_hash or not verify_password(password, password_hash):
+            return None
+    # Если password is None → предполагаем passwordless (реализуется отдельно)
+
+    # Генерация токенов
+    access_token = create_access_token(user_id)
+    refresh_token, refresh_hash = gen_refresh()
+
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    await create_refresh_token(user_id, refresh_hash, expires_at.isoformat())
+
+    return {
+        "user_id": user_id,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+    }
+```
+
+app/utils/security.py
+```
+import hashlib
+import secrets
+from datetime import datetime, timedelta
+import jwt
+from passlib.context import CryptContext
+from app.core.config import settings
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def create_access_token(user_id: str) -> str:
+    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode = {"sub": user_id, "exp": expire}
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+def create_refresh_token() -> tuple[str, str]:
+    """Возвращает (token, token_hash)"""
+    token = secrets.token_urlsafe(64)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    return token, token_hash
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+def normalize_login(login: str) -> str:
+    """Нормализация: email → lower, phone → E.164 (упрощённо)"""
+    login = login.strip()
+    if "@" in login:
+        return login.lower()
+    # Простая нормализация телефона: оставить только цифры, добавить +
+    digits = "".join(filter(str.isdigit, login))
+    if digits.startswith("7"):
+        return f"+{digits}"
+    if digits.startswith("8"):
+        return f"+7{digits[1:]}"
+    return login  # fallback
+```
+
+app/main.py
+```
+from fastapi import FastAPI
+from app.api.v1.routes import router as auth_router
+from app.core.config import settings
+from contextlib import asynccontextmanager
+from app.db.pool import close_pool
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await close_pool()
+
+app = FastAPI(
+    title="Auth Service",
+    lifespan=lifespan
+)
+
+app.include_router(auth_router, prefix="/api/v1/auth")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
+```
+

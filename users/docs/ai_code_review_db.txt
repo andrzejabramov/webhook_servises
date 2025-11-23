@@ -1,0 +1,727 @@
+# postgers_db
+
+## users - tables
+
+### contact_types
+```commandline
+CREATE TABLE "accounts"."contact_types" (
+  "id" int4 NOT NULL DEFAULT nextval('"accounts".contacts_id_seq'::regclass),
+  "name" text COLLATE "pg_catalog"."default" NOT NULL,
+  "created_at" timestamptz(6) DEFAULT now(),
+  CONSTRAINT "contacts_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "contacts_name_key" UNIQUE ("name")
+)
+;
+
+ALTER TABLE "accounts"."contact_types"
+  OWNER TO "xxxxxxxxx";
+```
+
+### user_contacts
+```commandline
+CREATE TABLE "accounts"."user_contacts" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "user_id" uuid NOT NULL,
+  "contact_type_id" int4 NOT NULL,
+  "value" text COLLATE "pg_catalog"."default" NOT NULL,
+  "is_active" bool NOT NULL DEFAULT true,
+  "created_at" timestamptz(6) DEFAULT now(),
+  "updated_at" timestamptz(6) DEFAULT now(),
+  CONSTRAINT "user_contacts_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "fk_user_contacts_type" FOREIGN KEY ("contact_type_id") REFERENCES "accounts"."contact_types" ("id") ON DELETE RESTRICT ON UPDATE NO ACTION,
+  CONSTRAINT "fk_user_contacts_user" FOREIGN KEY ("user_id") REFERENCES "accounts"."users" ("id") ON DELETE CASCADE ON UPDATE NO ACTION
+)
+;
+
+ALTER TABLE "accounts"."user_contacts"
+  OWNER TO "xxxxxxxxxx";
+
+CREATE TRIGGER "trg_user_contacts_updated_at" BEFORE UPDATE ON "accounts"."user_contacts"
+FOR EACH ROW
+EXECUTE PROCEDURE "accounts"."update_updated_at_column"();
+```
+
+### user_group_memberships
+```commandline
+CREATE TABLE "accounts"."user_group_memberships" (
+  "user_id" uuid NOT NULL,
+  "group_id" int2 NOT NULL,
+  "is_active" bool NOT NULL DEFAULT true,
+  "deactivated_at" timestamptz(6),
+  CONSTRAINT "user_group_memberships_pkey" PRIMARY KEY ("user_id", "group_id"),
+  CONSTRAINT "user_group_memberships_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "accounts"."user_groups" ("id") ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT "user_group_memberships_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "accounts"."users" ("id") ON DELETE CASCADE ON UPDATE NO ACTION
+)
+;
+
+ALTER TABLE "accounts"."user_group_memberships"
+  OWNER TO "xxxxxxxxx";
+```
+### user_groups
+```commandline
+CREATE TABLE "accounts"."user_groups" (
+  "id" int2 NOT NULL GENERATED ALWAYS AS IDENTITY (
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 32767
+START 1
+),
+  "name" text COLLATE "pg_catalog"."default" NOT NULL,
+  "description" text COLLATE "pg_catalog"."default",
+  "is_active" bool NOT NULL DEFAULT true,
+  "created_at" timestamptz(6) DEFAULT now(),
+  "updated_at" timestamptz(6) DEFAULT now(),
+  CONSTRAINT "user_groups_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "user_groups_name_key" UNIQUE ("name")
+)
+;
+
+ALTER TABLE "accounts"."user_groups"
+  OWNER TO "xxxxxxxxxxx";
+
+CREATE TRIGGER "tr_user_groups_set_updated_at" BEFORE UPDATE ON "accounts"."user_groups"
+FOR EACH ROW
+EXECUTE PROCEDURE "accounts"."set_updated_at"();
+```
+
+### users
+```commandline
+CREATE TABLE "accounts"."users" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "is_active" bool NOT NULL DEFAULT true,
+  "created_at" timestamptz(6) DEFAULT now(),
+  "updated_at" timestamptz(6) DEFAULT now(),
+  "profile" jsonb,
+  "password_hash" text COLLATE "pg_catalog"."default",
+  "password_updated_at" timestamptz(0),
+  CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+)
+;
+
+ALTER TABLE "accounts"."users"
+  OWNER TO "xxxxxxxxx";
+```
+
+## хранимые функции
+
+### "accounts"."add_user_to_group"("p_user_id" uuid, "p_group_id" int2)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."add_user_to_group"("p_user_id" uuid, "p_group_id" int2)
+  RETURNS "accounts"."user_group_memberships" AS $BODY$
+DECLARE
+    membership accounts.user_group_memberships;
+BEGIN
+    -- Если запись уже есть — реактивируем
+    UPDATE accounts.user_group_memberships
+    SET is_active = true, deactivated_at = NULL, created_at = now()
+    WHERE user_id = p_user_id AND group_id = p_group_id
+    RETURNING * INTO membership;
+
+    IF membership IS NULL THEN
+        INSERT INTO accounts.user_group_memberships (user_id, group_id)
+        VALUES (p_user_id, p_group_id)
+        RETURNING * INTO membership;
+    END IF;
+
+    RETURN membership;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+ALTER FUNCTION "accounts"."add_user_to_group"("p_user_id" uuid, "p_group_id" int2) OWNER TO "xxxxx";
+```
+
+### "accounts"."create_contact_type"("p_name" text)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."create_contact_type"("p_name" text)
+  RETURNS "accounts"."contact_types" AS $BODY$
+DECLARE
+    rec "accounts"."contact_types";
+BEGIN
+    INSERT INTO "accounts"."contact_types" ("name")
+    VALUES (p_name)
+    RETURNING * INTO rec;
+    RETURN rec;
+EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'Contact type "%" already exists', p_name;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+ALTER FUNCTION "accounts"."create_contact_type"("p_name" text) OWNER TO "xxxxxxxxx";
+```
+### "accounts"."create_user"("p_profile" jsonb=NULL::jsonb)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."create_user"("p_profile" jsonb=NULL::jsonb)
+  RETURNS "accounts"."users" AS $BODY$
+DECLARE
+    new_user accounts.users;
+BEGIN
+    INSERT INTO accounts.users (profile)
+    VALUES (p_profile)
+    RETURNING * INTO new_user;
+
+    RETURN new_user;
+EXCEPTION
+    WHEN unique_violation THEN
+        RAISE EXCEPTION 'Username "%" already exists', p_username;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+ALTER FUNCTION "accounts"."create_user"("p_contact_email" text, "p_username" text, "p_profile" jsonb) OWNER TO "xxxxxxx";
+```
+
+### "create_user_contact"("p_user_id" uuid, "p_contact_type_id" int4, "p_value" text)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."create_user_contact"("p_user_id" uuid, "p_contact_type_id" int4, "p_value" text)
+  RETURNS "accounts"."user_contacts" AS $BODY$
+DECLARE
+    new_record "accounts"."user_contacts";
+BEGIN
+    -- Проверим, существует ли пользователь и тип контакта (необязательно, но безопасно)
+    IF NOT EXISTS (SELECT 1 FROM "accounts"."users" WHERE "id" = "p_user_id") THEN
+        RAISE EXCEPTION 'User % not found', "p_user_id";
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM "accounts"."contact_types" WHERE "id" = "p_contact_type_id") THEN
+        RAISE EXCEPTION 'Contact type % not found', "p_contact_type_id";
+    END IF;
+
+    -- 🔑 КЛЮЧЕВОЕ ДОПОЛНЕНИЕ: деактивируем все предыдущие активные контакты этого типа для пользователя
+    UPDATE "accounts"."user_contacts"
+    SET "is_active" = false,
+        "updated_at" = now()
+    WHERE "user_id" = "p_user_id"
+      AND "contact_type_id" = "p_contact_type_id"
+      AND "is_active" = true;
+
+    -- Вставляем новый контакт (без ON CONFLICT по значению — допускаем дубли значений, если они не активны)
+    INSERT INTO "accounts"."user_contacts" (
+        "user_id",
+        "contact_type_id",
+        "value",
+        "is_active"
+    )
+    VALUES (
+        "p_user_id",
+        "p_contact_type_id",
+        "p_value",
+        true  -- всегда активен при создании
+    )
+    RETURNING * INTO new_record;
+
+    RETURN new_record;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "create_user_group"("p_name" text, "p_description" text=NULL::text)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."create_user_group"("p_name" text, "p_description" text=NULL::text)
+  RETURNS "accounts"."user_groups" AS $BODY$
+DECLARE
+    new_record accounts.user_groups;
+BEGIN
+    INSERT INTO accounts.user_groups (name, description)
+    VALUES (p_name, p_description)
+    RETURNING * INTO new_record;
+
+    RETURN new_record;
+EXCEPTION
+    WHEN unique_violation THEN
+        RAISE EXCEPTION 'User group with name "%" already exists', p_name;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+ALTER FUNCTION "accounts"."create_user_group"("p_name" text, "p_description" text) OWNER TO "xxxxx";
+```
+
+### "create_user_group_membership"("p_user_id" uuid, "p_group_id" int2)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."create_user_group_membership"("p_user_id" uuid, "p_group_id" int2)
+  RETURNS "accounts"."user_group_memberships" AS $BODY$
+DECLARE
+    new_record "accounts"."user_group_memberships";
+BEGIN
+    -- Вставляем только если такой связи ещё нет (даже неактивной)
+    INSERT INTO "accounts"."user_group_memberships" (
+        "user_id",
+        "group_id",
+        "is_active",
+        "deactivated_at"
+    )
+    VALUES (
+        p_user_id,
+        p_group_id,
+        true,
+        NULL
+    )
+    ON CONFLICT ("user_id", "group_id") DO UPDATE
+        SET "is_active" = true,
+            "deactivated_at" = NULL
+    RETURNING * INTO new_record;
+
+    RETURN new_record;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "deactivate_user"("p_id" uuid)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."deactivate_user"("p_id" uuid)
+  RETURNS "accounts"."users" AS $BODY$
+DECLARE
+    deactivated_user accounts.users;
+BEGIN
+    UPDATE accounts.users
+    SET is_active = false, updated_at = now()
+    WHERE id = p_id
+    RETURNING * INTO deactivated_user;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'User % not found', p_id;
+    END IF;
+    RETURN deactivated_user;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "deactivate_user_contact"("p_id" uuid)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."deactivate_user_contact"("p_id" uuid)
+  RETURNS "accounts"."user_contacts" AS $BODY$
+DECLARE
+    updated_record "accounts"."user_contacts";
+BEGIN
+    UPDATE "accounts"."user_contacts"
+    SET "is_active" = false,
+        "updated_at" = now()
+    WHERE "id" = p_id
+    RETURNING * INTO updated_record;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'User contact % not found', p_id;
+    END IF;
+
+    RETURN updated_record;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "deactivate_user_group_membership"("p_user_id" uuid, "p_group_id" int2)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."deactivate_user_group_membership"("p_user_id" uuid, "p_group_id" int2)
+  RETURNS "accounts"."user_group_memberships" AS $BODY$
+DECLARE
+    updated_record "accounts"."user_group_memberships";
+BEGIN
+    UPDATE "accounts"."user_group_memberships"
+    SET "is_active" = false,
+        "deactivated_at" = now()
+    WHERE "user_id" = p_user_id
+      AND "group_id" = p_group_id
+    RETURNING * INTO updated_record;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Membership not found for user % in group %', p_user_id, p_group_id;
+    END IF;
+
+    RETURN updated_record;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "get_all_contact_types"()
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."get_all_contact_types"()
+  RETURNS SETOF "accounts"."contact_types" AS $BODY$
+    SELECT * FROM "accounts"."contact_types" ORDER BY id;
+$BODY$
+  LANGUAGE sql STABLE
+  COST 100
+  ROWS 1000
+```
+
+### "get_contact_type_by_id"("p_id" int4)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."get_contact_type_by_id"("p_id" int4)
+  RETURNS "accounts"."contact_types" AS $BODY$
+DECLARE
+    rec "accounts"."contact_types";
+BEGIN
+    SELECT * INTO rec
+    FROM "accounts"."contact_types"
+    WHERE "id" = p_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Contact type % not found', p_id;
+    END IF;
+
+    RETURN rec;
+END;
+$BODY$
+  LANGUAGE plpgsql STABLE
+  COST 100
+```
+
+### "get_user_by_id"("p_id" uuid)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."get_user_by_id"("p_id" uuid)
+  RETURNS "accounts"."users" AS $BODY$
+DECLARE
+    user_rec accounts.users;
+BEGIN
+    SELECT * INTO user_rec FROM accounts.users WHERE id = p_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'User % not found', p_id;
+    END IF;
+    RETURN user_rec;
+END;
+$BODY$
+  LANGUAGE plpgsql STABLE
+  COST 100
+```
+
+### "get_user_contact_by_id"("p_id" uuid)
+```
+CREATE OR REPLACE FUNCTION "accounts"."get_user_contact_by_id"("p_id" uuid)
+  RETURNS "accounts"."user_contacts" AS $BODY$
+DECLARE
+    result_record "accounts"."user_contacts";
+BEGIN
+    SELECT * INTO result_record
+    FROM "accounts"."user_contacts"
+    WHERE "id" = p_id;
+
+    IF NOT FOUND THEN
+        RETURN NULL;  -- или RAISE EXCEPTION, если предпочтёшь
+    END IF;
+
+    RETURN result_record;
+END;
+$BODY$
+  LANGUAGE plpgsql STABLE
+  COST 100
+```
+
+### "get_user_contacts_by_user_id"("p_user_id" uuid, "p_only_active" bool=true)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."get_user_contacts_by_user_id"("p_user_id" uuid, "p_only_active" bool=true)
+  RETURNS SETOF "accounts"."user_contacts" AS $BODY$
+BEGIN
+    RETURN QUERY
+    SELECT *
+    FROM "accounts"."user_contacts"
+    WHERE "user_id" = p_user_id
+      AND ("is_active" = true OR NOT p_only_active)
+    ORDER BY "created_at" DESC;
+END;
+$BODY$
+  LANGUAGE plpgsql STABLE
+  COST 100
+  ROWS 1000
+```
+
+### "get_user_group_membership"("p_user_id" uuid, "p_group_id" int2)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."get_user_group_membership"("p_user_id" uuid, "p_group_id" int2)
+  RETURNS "accounts"."user_group_memberships" AS $BODY$
+DECLARE
+    result_record "accounts"."user_group_memberships";
+BEGIN
+    SELECT * INTO result_record
+    FROM "accounts"."user_group_memberships"
+    WHERE "user_id" = p_user_id
+      AND "group_id" = p_group_id;
+
+    IF NOT FOUND THEN
+        RETURN NULL;  -- или RAISE EXCEPTION, если предпочитаешь
+    END IF;
+
+    RETURN result_record;
+END;
+$BODY$
+  LANGUAGE plpgsql STABLE
+  COST 100
+```
+
+### "get_user_groups"("p_user_id" uuid)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."get_user_groups"("p_user_id" uuid)
+  RETURNS SETOF "accounts"."user_groups" AS $BODY$
+    SELECT g.*
+    FROM accounts.user_groups g
+    JOIN accounts.user_group_memberships m ON g.id = m.group_id
+    WHERE m.user_id = p_user_id AND m.is_active = true
+    ORDER BY g.name;
+$BODY$
+  LANGUAGE sql VOLATILE
+  COST 100
+  ROWS 1000
+```
+
+### "get_user_groups"("p_user_id" uuid, "p_only_active" bool=true)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."get_user_groups"("p_user_id" uuid, "p_only_active" bool=true)
+  RETURNS SETOF "accounts"."user_group_memberships" AS $BODY$
+BEGIN
+    RETURN QUERY
+    SELECT *
+    FROM "accounts"."user_group_memberships"
+    WHERE "user_id" = p_user_id
+      AND ("is_active" = true OR NOT p_only_active)
+    ORDER BY "group_id";
+END;
+$BODY$
+  LANGUAGE plpgsql STABLE
+  COST 100
+  ROWS 1000
+```
+
+### "list_contact_types"()
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."list_contact_types"()
+  RETURNS SETOF "accounts"."contact_types" AS $BODY$
+BEGIN
+    RETURN QUERY
+    SELECT * FROM "accounts"."contact_types"
+    ORDER BY "id";
+END;
+$BODY$
+  LANGUAGE plpgsql STABLE
+  COST 100
+  ROWS 1000
+```
+
+### "list_user_groups"()
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."list_user_groups"()
+  RETURNS SETOF "accounts"."user_groups" AS $BODY$
+BEGIN
+    RETURN QUERY
+    SELECT * FROM accounts.user_groups
+    ORDER BY id;
+END;
+$BODY$
+  LANGUAGE plpgsql STABLE
+  COST 100
+  ROWS 1000
+```
+
+### "list_users"()
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."list_users"()
+  RETURNS SETOF "accounts"."users" AS $BODY$
+    SELECT * FROM accounts.users ORDER BY created_at DESC;
+$BODY$
+  LANGUAGE sql STABLE
+  COST 100
+  ROWS 1000
+```
+
+### "reactivate_user"("p_id" uuid)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."reactivate_user"("p_id" uuid)
+  RETURNS "accounts"."users" AS $BODY$
+DECLARE
+    reactivated_user accounts.users;
+BEGIN
+    UPDATE accounts.users
+    SET is_active = true, updated_at = now()
+    WHERE id = p_id
+    RETURNING * INTO reactivated_user;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'User % not found', p_id;
+    END IF;
+    RETURN reactivated_user;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "reactivate_user_contact"("p_id" uuid)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."reactivate_user_contact"("p_id" uuid)
+  RETURNS "accounts"."user_contacts" AS $BODY$
+DECLARE
+    updated_record "accounts"."user_contacts";
+BEGIN
+    UPDATE "accounts"."user_contacts"
+    SET "is_active" = true,
+        "updated_at" = now()
+    WHERE "id" = p_id
+    RETURNING * INTO updated_record;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'User contact % not found', p_id;
+    END IF;
+
+    RETURN updated_record;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "reactivate_user_group_membership"("p_user_id" uuid, "p_group_id" int2)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."reactivate_user_group_membership"("p_user_id" uuid, "p_group_id" int2)
+  RETURNS "accounts"."user_group_memberships" AS $BODY$
+DECLARE
+    updated_record "accounts"."user_group_memberships";
+BEGIN
+    UPDATE "accounts"."user_group_memberships"
+    SET "is_active" = true,
+        "deactivated_at" = NULL
+    WHERE "user_id" = p_user_id
+      AND "group_id" = p_group_id
+    RETURNING * INTO updated_record;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Membership not found for user % in group %', p_user_id, p_group_id;
+    END IF;
+
+    RETURN updated_record;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "remove_user_from_group"("p_user_id" uuid, "p_group_id" int2)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."remove_user_from_group"("p_user_id" uuid, "p_group_id" int2)
+  RETURNS "accounts"."user_group_memberships" AS $BODY$
+DECLARE
+    updated_membership accounts.user_group_memberships;
+BEGIN
+    UPDATE accounts.user_group_memberships
+    SET is_active = false, deactivated_at = now()
+    WHERE user_id = p_user_id AND group_id = p_group_id AND is_active = true
+    RETURNING * INTO updated_membership;
+
+    RETURN updated_membership;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "set_updated_at"()
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."set_updated_at"()
+  RETURNS "pg_catalog"."trigger" AS $BODY$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "update_updated_at_column"()
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."update_updated_at_column"()
+  RETURNS "pg_catalog"."trigger" AS $BODY$
+BEGIN
+    NEW."updated_at" = now();
+    RETURN NEW;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "update_user"("p_id" uuid, "p_username" text=NULL::text, "p_full_name" text=NULL::text, "p_profile" jsonb=NULL::jsonb, "p_is_active" bool=NULL::boolean)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."update_user"("p_id" uuid, "p_username" text=NULL::text, "p_full_name" text=NULL::text, "p_profile" jsonb=NULL::jsonb, "p_is_active" bool=NULL::boolean)
+  RETURNS "accounts"."users" AS $BODY$
+DECLARE
+    updated_user accounts.users;
+BEGIN
+    UPDATE accounts.users
+    SET
+        username = COALESCE(p_username, username),
+        full_name = COALESCE(p_full_name, full_name),
+        profile = COALESCE(p_profile, profile),
+        is_active = COALESCE(p_is_active, is_active),
+        updated_at = now()
+    WHERE id = p_id
+    RETURNING * INTO updated_user;
+
+    IF NOT FOUND THEN
+        RETURN NULL;
+    END IF;
+
+    RETURN updated_user;
+END;
+$BODY$
+LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "update_user_group"("p_id" int2, "p_name" text=NULL::text, "p_description" text=NULL::text, "p_is_active" bool=NULL::boolean)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."update_user_group"("p_id" int2, "p_name" text=NULL::text, "p_description" text=NULL::text, "p_is_active" bool=NULL::boolean)
+  RETURNS "accounts"."user_groups" AS $BODY$
+DECLARE
+    updated_row accounts.user_groups;
+BEGIN
+    UPDATE accounts.user_groups
+    SET
+        name = COALESCE(p_name, name),
+        description = COALESCE(p_description, description),
+        is_active = COALESCE(p_is_active, is_active),
+        updated_at = now()
+    WHERE id = p_id
+    RETURNING * INTO updated_row;
+
+    RETURN updated_row;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+```
+
+### "update_user_profile"("p_id" uuid, "p_is_active" bool=NULL::boolean, "p_profile" jsonb=NULL::jsonb)
+```commandline
+CREATE OR REPLACE FUNCTION "accounts"."update_user_profile"("p_id" uuid, "p_is_active" bool=NULL::boolean, "p_profile" jsonb=NULL::jsonb)
+  RETURNS "accounts"."users" AS $BODY$
+DECLARE
+    updated_user accounts.users;
+BEGIN
+    UPDATE accounts.users
+    SET
+        profile = COALESCE(p_profile, profile),
+        is_active = COALESCE(p_is_active, is_active),
+        updated_at = now()
+    WHERE id = p_id
+    RETURNING * INTO updated_user;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'User % not found', p_id;
+    END IF;
+
+    RETURN updated_user;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+`
