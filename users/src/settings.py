@@ -5,7 +5,8 @@ from typing import Set
 
 
 class Settings(BaseSettings):
-    mydb_dsn: PostgresDsn
+    database_write_url: PostgresDsn
+    database_read_url: PostgresDsn
     rabbitmq_url: str
     redis_url: RedisDsn = Field(
         default="redis://localhost:6379/1",

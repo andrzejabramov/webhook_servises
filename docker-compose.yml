@@ -1,36 +1,56 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16
-    container_name: db-postgres
+  etcd:
+    image: gcr.io/etcd-development/etcd:v3.5.16
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
     networks:
       - backend
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 15
 
-  rabbitmq:
-    image: rabbitmq:3.13-management
-    container_name: dev-rabbitmq
+  pg-node-1:
+    build: ./pg-node
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+      POSTGRES_PASSWORD: God1980obezyanj!
+      POSTGRES_USER: postgres
+      PATRONI_NAME: pg-node-1
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-node-1:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-node-1:5432
+    volumes:
+      - pgdata1:/var/lib/postgresql/data
     networks:
       - backend
+    depends_on:
+      - etcd
+
+  pg-node-2:
+    build: ./pg-node
+    environment:
+      POSTGRES_PASSWORD: God1980obezyanj!
+      POSTGRES_USER: postgres
+      PATRONI_NAME: pg-node-2
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg-node-2:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-node-2:5432
+    volumes:
+      - pgdata2:/var/lib/postgresql/data
+    networks:
+      - backend
+    depends_on:
+      - etcd
+
+  haproxy:
+    image: haproxytech/haproxy-alpine
+    ports:
+      - "5432:5432"  # write
+      - "5433:5433"  # read
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+    networks:
+      - backend
+    depends_on:
+      - pg-node-1
+      - pg-node-2
 
   redis:
     image: redis:7-alpine
@@ -45,6 +65,18 @@ services:
       timeout: 3s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: dev-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - backend
+
   auth:
     build: ./auth
     container_name: dev-auth
@@ -53,15 +85,15 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
+      POSTGRES_HOST: haproxy          # ← меняется на haproxy
+      POSTGRES_PORT: "5432"           # ← порт записи
       POSTGRES_DB: ${POSTGRES_DB}
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       JWT_ALGORITHM: HS256
     depends_on:
-      postgres:
-        condition: service_healthy
+      haproxy:
+        condition: service_started
       redis:
         condition: service_healthy
     networks:
@@ -72,13 +104,18 @@ services:
     container_name: dev-users
     ports:
       - "8002:8002"
+    environment:
+      DATABASE_WRITE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@haproxy:5432/${POSTGRES_DB}
+      DATABASE_READ_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@haproxy:5433/${POSTGRES_DB}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      REDIS_URL: redis://redis:6379/1
     depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      haproxy:
+        condition: service_started
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_started
     networks:
       - backend
 
@@ -88,15 +125,20 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_WRITE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@haproxy:5432/${POSTGRES_DB}
+      DATABASE_READ_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@haproxy:5433/${POSTGRES_DB}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
     depends_on:
-      postgres:
-        condition: service_healthy
+      haproxy:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     networks:
       - backend
 
 volumes:
-  postgres_data:
+  pgdata1:
+  pgdata2:
 
 networks:
   backend:

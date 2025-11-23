@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 
 from src.middleware.request_id import RequestIDMiddleware
 from src.middleware.logging import LoggingMiddleware
@@ -17,8 +18,10 @@ from src.exceptions import (
 
 @asynccontextmanager
 async def lifespan(app):
+    logger.info("🚀 Initializing database connection pools for webhook...")
     await init_pools()
     yield
+    logger.info("🛑 Closing database connection pools for webhook...")
     await close_pools()
 
 

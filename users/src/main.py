@@ -17,8 +17,10 @@ logger.info("✅ Logger is configured and working")
 
 @asynccontextmanager
 async def lifespan(app):
+    logger.info("🚀 Initializing database connection pools...")
     await init_pools()
     yield
+    logger.info("🛑 Closing database connection pools...")
     await close_pools()
 
 

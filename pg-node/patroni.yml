@@ -1,0 +1,42 @@
+scope: payment_cluster
+namespace: /db/
+name: "{{ PATRONI_NAME }}"
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: "{{ PATRONI_RESTAPI_CONNECT_ADDRESS }}"
+
+etcd:
+  host: etcd:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        max_wal_senders: 10
+        wal_keep_size: 128MB
+        max_replication_slots: 10
+        logging_collector: off
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: "{{ PATRONI_POSTGRESQL_CONNECT_ADDRESS }}"
+  data_dir: /var/lib/postgresql/data/pgdata
+  bin_dir: /usr/lib/postgresql/16/bin
+  authentication:
+    replication:
+      username: replicator
+      password: repPass123
+    superuser:
+      username: postgres
+      password: mysecretpassword
+  parameters:
+    shared_preload_libraries: pg_stat_statements

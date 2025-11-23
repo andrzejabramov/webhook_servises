@@ -4,7 +4,8 @@ from pathlib import Path
 
 
 class Settings(BaseSettings):
-    database_url: PostgresDsn
+    database_write_url: PostgresDsn
+    database_read_url: PostgresDsn
     rabbitmq_url: str
     log_dir: Path = Path("./logs")
 

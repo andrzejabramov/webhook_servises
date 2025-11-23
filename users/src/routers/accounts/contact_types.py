@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from asyncpg import Pool
 
-from src.dependencies.db import get_accounts_db_pool_dep
+from src.dependencies.db import get_read_db_pool, get_write_db_pool
 from src.services.contact_types import ContactTypeService
 from src.schemas.contact_types import ContactTypeCreate, ContactTypeRead
 
@@ -13,12 +13,12 @@ def get_contact_type_service(pool: Pool = Depends(get_accounts_db_pool_dep)) -> 
 @router.post("/", response_model=ContactTypeRead, status_code=status.HTTP_201_CREATED)
 async def create_contact_type(
     data: ContactTypeCreate,
-    service: ContactTypeService = Depends(get_contact_type_service)
+    service: ContactTypeService = Depends(get_write_db_pool)
 ):
     return await service.create(data)
 
 @router.get("/", response_model=list[ContactTypeRead])
 async def list_contact_types(
-    service: ContactTypeService = Depends(get_contact_type_service)
+    service: ContactTypeService = Depends(get_read_db_pool)
 ):
     return await service.list_all()

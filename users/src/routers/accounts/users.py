@@ -19,7 +19,7 @@ from src.services.users import (
 )
 from src.db.redis import redis
 from src.utils.json_utils import maybe_json_loads, maybe_json_dumps
-from src.dependencies.db import get_accounts_db_pool_dep
+from src.dependencies.db import get_read_db_pool, get_write_db_pool
 from src.dependencies.upload import validate_upload_file
 from src.schemas.common import PaginatedResponse
 from src.exceptions.exceptions import ValidationError, UserNotFound
@@ -35,18 +35,18 @@ from src.schemas.users import (
 
 router = APIRouter(tags=["Accounts: Users"])
 
-async def get_user_service(pool: Pool = Depends(get_accounts_db_pool_dep)) -> UserService:
+async def get_user_service(pool: Pool = Depends(get_read_db_pool)) -> UserService:
     return UserService(pool)
 
 @router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-async def create_user(user: UserCreate, service: UserService = Depends(get_user_service)):
+async def create_user(user: UserCreate, service: UserService = Depends(get_write_db_pool)):
     return await service.create(user)
 
 @router.get("/", response_model=PaginatedResponse[UserRead])
 async def get_user_list(
         page: int = Query(1, ge=1, description="Номер страницы"),
         size: int = Query(50, ge=1, le=100, description="Размер страницы (макс. 100)"),
-        service: UserService = Depends(get_user_service)
+        service: UserService = Depends(get_read_db_pool)
 ):
     return await service.get_paginated(page=page, size=size)
 
@@ -61,7 +61,7 @@ async def update_user(
         }
     ]
 ),
-    service: UserService = Depends(lambda pool=Depends(get_accounts_db_pool_dep): UserService(pool))
+    service: UserService = Depends(lambda pool=Depends(get_write_db_pool): UserService(pool))
 ):
     return await service.update(
         user_id=user_id,
@@ -72,7 +72,7 @@ async def update_user(
 @router.post("/bulk", response_model=BulkCreateResult)
 async def bulk_create_users(
         request: BulkCreateRequest,
-        service: UserService = Depends(get_user_service),
+        service: UserService = Depends(get_write_db_pool),
 ):
     try:
         return await service.bulk_create_users(interface=request.interface, users=request.users)
@@ -90,7 +90,7 @@ async def bulk_create_users_upload(file: UploadFile = Depends(validate_upload_fi
 @router.get("/by-identifier", response_model=UserDetailRead)
 async def get_user_by_identifier(
     identifier: str = Query(..., min_length=1, max_length=255, description="UUID, email, phone (+7...), or second_login"),
-    pool: Pool = Depends(get_accounts_db_pool_dep)
+    pool: Pool = Depends(get_read_db_pool)
 ):
     cache_key = f"user_by_id:{identifier}"
     cached = await redis.get(cache_key)
@@ -131,7 +131,7 @@ async def get_user_by_identifier(
     async def get_user_by_identifier(
             identifier: str = Query(..., min_length=1, max_length=255,
                                     description="UUID, email, phone (+7...), or second_login"),
-            pool: Pool = Depends(get_accounts_db_pool_dep)
+            pool: Pool = Depends(get_read_db_pool)
     ):
         cache_key = f"user_by_id:{identifier}"
         cached = await redis.get(cache_key)
@@ -172,6 +172,6 @@ async def get_user_by_identifier(
         async def get_user_by_identifier(
                 identifier: str = Query(..., min_length=1, max_length=255,
                                         description="UUID, email, phone (+7...), or second_login"),
-                pool: Pool = Depends(get_accounts_db_pool_dep)
+                pool: Pool = Depends(get_read_db_pool)
         ):
             return await get_user_by_identifier_cached(identifier, pool)
