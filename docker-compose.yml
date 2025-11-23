@@ -12,8 +12,8 @@ services:
   pg-node-1:
     build: ./pg-node
     environment:
-      POSTGRES_PASSWORD: God1980obezyanj!
-      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: XXXXXXXXXXXXXXX
+      POSTGRES_USER: XXXXXXXXX
       PATRONI_NAME: pg-node-1
       PATRONI_RESTAPI_CONNECT_ADDRESS: pg-node-1:8008
       PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-node-1:5432
@@ -27,8 +27,8 @@ services:
   pg-node-2:
     build: ./pg-node
     environment:
-      POSTGRES_PASSWORD: God1980obezyanj!
-      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: XXXXXXXXXXXX
+      POSTGRES_USER: XXXXXXXXXXX
       PATRONI_NAME: pg-node-2
       PATRONI_RESTAPI_CONNECT_ADDRESS: pg-node-2:8008
       PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg-node-2:5432
